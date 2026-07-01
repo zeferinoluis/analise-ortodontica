@@ -86,6 +86,15 @@
 
                     <div id="painel-grafico-controlos">
                         <button class="action-btn" onclick="startCalibration()">Calibrar Régua (10mm)</button>
+                        <div class="form-group" id="grupo-tipo-analise-cefalo" style="margin-top:12px; margin-bottom:12px;">
+                            <label>Análise Cefalométrica:</label>
+                            <select id="tipo-analise-cefalo" onchange="redrawCanvas()" style="width:100%; padding:8px; border-radius:4px;">
+                                <option value="steiner">Steiner</option>
+                                <option value="downs">Downs</option>
+                                <option value="tweed">Tweed</option>
+                                <option value="todas">Todas as Análises</option>
+                            </select>
+                        </div>
                         <h4 style="margin-top:15px;">Marcos Anatómicos</h4>
                         <div id="lista-pontos-dinamica"></div>
                     </div>

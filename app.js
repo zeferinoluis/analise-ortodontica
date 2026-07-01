@@ -5,8 +5,8 @@
 let appState = {
     tipoEstudo: 'cefalometria',
     estudosImagens: {
-        cefalometria: { pontos: { S: null, N: null, A: null, B: null, Gn: null }, escalaVisual: 1, scalePxPerMm: 1, src: "", naturalWidth: 0, naturalHeight: 0 },
-        facial: { pontos: { Tr: null, Na: null, Sn: null, Me: null, Zy: null }, escalaVisual: 1, scalePxPerMm: 1, src: "", naturalWidth: 0, naturalHeight: 0 }
+        cefalometria: { pontos: { S: null, N: null, A: null, B: null, Pg: null, Me: null, Gn: null, Go: null, Or: null, Po: null, ENA: null, ENP: null, U1i: null, U1a: null, L1i: null, L1a: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 },
+        facial: { pontos: { Tr: null, Na: null, Gl: null, Prn: null, Sn: null, Ls: null, Me: null, PgL: null, Zy_D: null, Zy_E: null, Ch_D: null, Ch_E: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 }
     },
     historicoConsultas: [],
     imagensPaciente: {},
@@ -17,8 +17,38 @@ let db;
 let escalaVisual = 1;
 
 const configuracaoPontos = {
-    cefalometria: [{ nome: 'Ponto Sela (S)', id: 'S' }, { nome: 'Ponto Násio (N)', id: 'N' }, { nome: 'Ponto A (A)', id: 'A' }, { nome: 'Ponto B (B)', id: 'B' }, { nome: 'Gnato (Gn)', id: 'Gn' }],
-    facial: [{ nome: 'Tríquio (Tr)', id: 'Tr' }, { nome: 'Násio Facial (Na)', id: 'Na' }, { nome: 'Subnasal (Sn)', id: 'Sn' }, { nome: 'Mento (Me)', id: 'Me' }, { nome: 'Zígio (Zy)', id: 'Zy' }]
+    cefalometria: [
+        { nome: 'Ponto Sela (S)', id: 'S' },
+        { nome: 'Ponto Násio (N)', id: 'N' },
+        { nome: 'Ponto A', id: 'A' },
+        { nome: 'Ponto B', id: 'B' },
+        { nome: 'Pogônio (Pg)', id: 'Pg' },
+        { nome: 'Mentoniano (Me)', id: 'Me' },
+        { nome: 'Gnátio (Gn)', id: 'Gn' },
+        { nome: 'Gônio (Go)', id: 'Go' },
+        { nome: 'Orbitário (Or)', id: 'Or' },
+        { nome: 'Pório (Po)', id: 'Po' },
+        { nome: 'Espinha Nasal Ant. (ENA)', id: 'ENA' },
+        { nome: 'Espinha Nasal Post. (ENP)', id: 'ENP' },
+        { nome: 'Incisivo Sup. — Borda (U1i)', id: 'U1i' },
+        { nome: 'Incisivo Sup. — Ápice (U1a)', id: 'U1a' },
+        { nome: 'Incisivo Inf. — Borda (L1i)', id: 'L1i' },
+        { nome: 'Incisivo Inf. — Ápice (L1a)', id: 'L1a' }
+    ],
+    facial: [
+        { nome: 'Trichion (Tr)', id: 'Tr' },
+        { nome: 'Násio Facial (Na)', id: 'Na' },
+        { nome: 'Glabela (Gl)', id: 'Gl' },
+        { nome: 'Pronasal (Prn)', id: 'Prn' },
+        { nome: 'Subnasal (Sn)', id: 'Sn' },
+        { nome: 'Lábio Superior (Ls)', id: 'Ls' },
+        { nome: 'Mento (Me)', id: 'Me' },
+        { nome: 'Pogônio Mole (Pg\')', id: 'PgL' },
+        { nome: 'Zigomático Direito (Zy D)', id: 'Zy_D' },
+        { nome: 'Zigomático Esquerdo (Zy E)', id: 'Zy_E' },
+        { nome: 'Comissura Labial Dir. (Ch D)', id: 'Ch_D' },
+        { nome: 'Comissura Labial Esq. (Ch E)', id: 'Ch_E' }
+    ]
 };
 
 const canvas = document.getElementById('main-canvas');
@@ -71,6 +101,9 @@ function atualizarInterfaceEstudo() {
         configuracaoPontos[appState.tipoEstudo].forEach(p => {
             lista.innerHTML += `<button class="point-btn" id="pt-${p.id}" onclick="selectPoint('${p.id}')">${p.nome}</button>`;
         });
+
+        const grupoAnalise = document.getElementById('grupo-tipo-analise-cefalo');
+        if (grupoAnalise) grupoAnalise.style.display = (appState.tipoEstudo === 'cefalometria') ? 'block' : 'none';
 
         let cEstudo = appState.estudosImagens[appState.tipoEstudo];
         if (cEstudo.src) {
@@ -162,6 +195,24 @@ canvas.addEventListener('click', function(e) {
 function drawLine(p1, p2, color, targetCtx = ctx) { targetCtx.beginPath(); targetCtx.moveTo(p1.x, p1.y); targetCtx.lineTo(p2.x, p2.y); targetCtx.strokeStyle = color; targetCtx.lineWidth = 4; targetCtx.stroke(); }
 function obterAngulo(p1, p2, p3) { let ab = Math.sqrt(pow2(p2.x-p1.x)+pow2(p2.y-p1.y)); let bc = Math.sqrt(pow2(p3.x-p2.x)+pow2(p3.y-p2.y)); let ac = Math.sqrt(pow2(p3.x-p1.x)+pow2(p3.y-p1.y)); return (Math.acos((pow2(ab)+pow2(bc)-pow2(ac))/(2*ab*bc))*180)/Math.PI; }
 function pow2(x) { return x*x; }
+function distanciaPontos(p1, p2) { return Math.sqrt(pow2(p2.x-p1.x) + pow2(p2.y-p1.y)); }
+// Ângulo (0-180°) entre a reta que passa por (a1,a2) e a reta que passa por (b1,b2), independente do vértice comum
+function anguloEntreLinhas(a1, a2, b1, b2) {
+    let v1 = { x: a2.x - a1.x, y: a2.y - a1.y };
+    let v2 = { x: b2.x - b1.x, y: b2.y - b1.y };
+    let dot = v1.x*v2.x + v1.y*v2.y;
+    let mag1 = Math.sqrt(v1.x*v1.x + v1.y*v1.y);
+    let mag2 = Math.sqrt(v2.x*v2.x + v2.y*v2.y);
+    let cos = mag1 && mag2 ? dot/(mag1*mag2) : 0;
+    cos = Math.max(-1, Math.min(1, cos));
+    return Math.acos(cos) * 180 / Math.PI;
+}
+// Distância perpendicular (em px) de um ponto a uma reta definida por l1-l2
+function distanciaPontoLinha(p, l1, l2) {
+    let num = Math.abs((l2.y-l1.y)*p.x - (l2.x-l1.x)*p.y + l2.x*l1.y - l2.y*l1.x);
+    let den = Math.sqrt(pow2(l2.y-l1.y) + pow2(l2.x-l1.x));
+    return den ? num/den : 0;
+}
 function atualizarResultadosGraficosLimpos() { document.getElementById('results-tbody').innerHTML = `<tr><td colspan="4">Aguardando pontos...</td></tr>`; }
 
 function redrawCanvas() {
@@ -180,41 +231,137 @@ function redrawCanvas() {
     }
     if (appState.tipoEstudo === 'cefalometria') {
         let pts = cEstudo.pontos;
-        if(pts.S && pts.N) drawLine({x: pts.S.x*cEstudo.escalaVisual, y:pts.S.y*cEstudo.escalaVisual}, {x: pts.N.x*cEstudo.escalaVisual, y:pts.N.y*cEstudo.escalaVisual}, '#0284c7');
-        if(pts.N && pts.A) drawLine({x: pts.N.x*cEstudo.escalaVisual, y:pts.N.y*cEstudo.escalaVisual}, {x: pts.A.x*cEstudo.escalaVisual, y:pts.A.y*cEstudo.escalaVisual}, '#16a34a');
-        if(pts.N && pts.B) drawLine({x: pts.N.x*cEstudo.escalaVisual, y:pts.N.y*cEstudo.escalaVisual}, {x: pts.B.x*cEstudo.escalaVisual, y:pts.B.y*cEstudo.escalaVisual}, '#e11d48');
+        const v = (k) => pts[k] ? { x: pts[k].x*cEstudo.escalaVisual, y: pts[k].y*cEstudo.escalaVisual } : null;
+        if(pts.S && pts.N) drawLine(v('S'), v('N'), '#0284c7');
+        if(pts.N && pts.A) drawLine(v('N'), v('A'), '#16a34a');
+        if(pts.N && pts.B) drawLine(v('N'), v('B'), '#e11d48');
+        if(pts.Go && pts.Gn) drawLine(v('Go'), v('Gn'), '#ea580c');
+        if(pts.Or && pts.Po) drawLine(v('Or'), v('Po'), '#7c3aed');
+        if(pts.U1a && pts.U1i) drawLine(v('U1a'), v('U1i'), '#0891b2');
+        if(pts.L1a && pts.L1i) drawLine(v('L1a'), v('L1i'), '#0891b2');
         calcularCefalometriaAvancada();
     } else if (appState.tipoEstudo === 'facial') { calcularAnaliseFacial(); }
 }
 
-function calcularCefalometriaAvancada() {
+// Constrói uma linha de resultado padronizada {grupo, label, valor, norma, status, texto}
+function linhaMedida(grupo, label, valor, unidade, normaCentro, tolerancia, textoExtra) {
+    let ok = Math.abs(valor - normaCentro) <= tolerancia;
+    let texto = textoExtra || (ok ? 'Normal' : 'Desvio');
+    return { grupo, label, valor: valor.toFixed(1) + unidade, norma: normaCentro.toFixed(1) + unidade + ' ± ' + tolerancia, status: ok ? 'status-ok' : 'status-dev', texto };
+}
+function linhaSemCalibragem(grupo, label, normaCentro, unidade) {
+    return { grupo, label, valor: '—', norma: normaCentro.toFixed(1) + unidade, status: 'status-dev', texto: 'Calibrar régua' };
+}
+
+// Calcula todas as linhas de resultado da cefalometria consoante a análise escolhida ('steiner'|'downs'|'tweed'|'todas')
+function calcularResultadosCefalometricosCompleto(tipo) {
     const cEstudo = appState.estudosImagens.cefalometria;
-    const pts = cEstudo.pontos; let html = ''; let snaVal = null, snbVal = null;
-    if (pts.S && pts.N && (pts.A || pts.B)) {
-        if (pts.A) { snaVal = obterAngulo(pts.S, pts.N, pts.A); html += `<tr><td><strong>Ângulo SNA</strong></td><td>${snaVal.toFixed(1)}°</td><td>82.0°</td><td class="${Math.abs(snaVal-82)<=2?'status-ok':'status-dev'}">${Math.abs(snaVal-82)<=2?'Normal':'Desvio'}</td></tr>`; }
-        if (pts.B) { snbVal = obterAngulo(pts.S, pts.N, pts.B); html += `<tr><td><strong>Ângulo SNB</strong></td><td>${snbVal.toFixed(1)}°</td><td>80.0°</td><td class="${Math.abs(snbVal-80)<=2?'status-ok':'status-dev'}">${Math.abs(snbVal-80)<=2?'Normal':'Desvio'}</td></tr>`; }
-        if (snaVal !== null && snbVal !== null) {
-            let anb = snaVal - snbVal;
-            let classe = anb > 4 ? 'Classe II' : (anb < 0 ? 'Classe III' : 'Classe I');
-            html += `<tr><td><strong>Ângulo ANB</strong></td><td>${anb.toFixed(1)}°</td><td>2.0°</td><td class="${Math.abs(anb-2)<=2?'status-ok':'status-dev'}">${classe}</td></tr>`;
+    const p = cEstudo.pontos;
+    const scale = cEstudo.scalePxPerMm;
+    const linhas = [];
+
+    // Bloco Geral — comum a todas as análises
+    let sna = null, snb = null;
+    if (p.S && p.N && p.A) sna = obterAngulo(p.S, p.N, p.A);
+    if (p.S && p.N && p.B) snb = obterAngulo(p.S, p.N, p.B);
+    if (sna !== null) linhas.push(linhaMedida('Geral', 'Ângulo SNA', sna, '°', 82, 2));
+    if (snb !== null) linhas.push(linhaMedida('Geral', 'Ângulo SNB', snb, '°', 80, 2));
+    if (sna !== null && snb !== null) {
+        let anb = sna - snb;
+        let classe = anb > 4 ? 'Classe II' : (anb < 0 ? 'Classe III' : 'Classe I');
+        linhas.push(linhaMedida('Geral', 'Ângulo ANB', anb, '°', 2, 2, classe));
+    }
+    if (p.S && p.N) {
+        if (scale) linhas.push(linhaMedida('Geral', 'Distância N-S', distanciaPontos(p.S, p.N) / scale, ' mm', 75, 4));
+        else linhas.push(linhaSemCalibragem('Geral', 'Distância N-S', 75, ' mm'));
+    }
+    let interincisal = null;
+    if (p.U1a && p.U1i && p.L1a && p.L1i) {
+        interincisal = anguloEntreLinhas(p.U1a, p.U1i, p.L1a, p.L1i);
+        linhas.push(linhaMedida('Geral', 'Ângulo Interincisal', interincisal, '°', 130, 6));
+    }
+
+    if (tipo === 'steiner' || tipo === 'todas') {
+        if (p.S && p.N && p.Go && p.Gn) linhas.push(linhaMedida('Steiner', 'SN–GoGn (Plano Mandibular)', anguloEntreLinhas(p.S, p.N, p.Go, p.Gn), '°', 32, 5));
+        if (p.U1a && p.U1i && p.N && p.A) linhas.push(linhaMedida('Steiner', 'U1–NA (angular)', anguloEntreLinhas(p.U1a, p.U1i, p.N, p.A), '°', 22, 2));
+        if (p.U1i && p.N && p.A) { if (scale) linhas.push(linhaMedida('Steiner', 'U1–NA (linear)', distanciaPontoLinha(p.U1i, p.N, p.A) / scale, ' mm', 4, 2)); else linhas.push(linhaSemCalibragem('Steiner', 'U1–NA (linear)', 4, ' mm')); }
+        if (p.L1a && p.L1i && p.N && p.B) linhas.push(linhaMedida('Steiner', 'L1–NB (angular)', anguloEntreLinhas(p.L1a, p.L1i, p.N, p.B), '°', 25, 2));
+        if (p.L1i && p.N && p.B) { if (scale) linhas.push(linhaMedida('Steiner', 'L1–NB (linear)', distanciaPontoLinha(p.L1i, p.N, p.B) / scale, ' mm', 4, 2)); else linhas.push(linhaSemCalibragem('Steiner', 'L1–NB (linear)', 4, ' mm')); }
+    }
+
+    if (tipo === 'downs' || tipo === 'todas') {
+        if (p.Or && p.Po && p.N && p.Pg) linhas.push(linhaMedida('Downs', 'Ângulo Facial (FH/N-Pg)', anguloEntreLinhas(p.Or, p.Po, p.N, p.Pg), '°', 87.8, 3.6));
+        if (p.N && p.A && p.Pg) {
+            let conv = 180 - obterAngulo(p.N, p.A, p.Pg);
+            linhas.push(linhaMedida('Downs', 'Convexidade (N-A-Pg)', conv, '°', 0, 5.1, Math.abs(conv) <= 5.1 ? 'Normal' : (conv > 0 ? 'Perfil Convexo' : 'Perfil Côncavo')));
         }
-        if (pts.S && pts.N && cEstudo.scalePxPerMm) {
-            let dx = pts.N.x - pts.S.x, dy = pts.N.y - pts.S.y;
-            let distNS = Math.sqrt(dx*dx + dy*dy) / cEstudo.scalePxPerMm;
-            html += `<tr><td><strong>Distância N-S</strong></td><td>${distNS.toFixed(1)} mm</td><td>75.0 mm</td><td class="${Math.abs(distNS-75)<=4?'status-ok':'status-dev'}">${Math.abs(distNS-75)<=4?'Normal':'Desvio'}</td></tr>`;
-        } else if (pts.S && pts.N) {
-            html += `<tr><td colspan="4" style="color:#dc2626;">Calibre a régua (10mm) para obter a distância N-S em mm.</td></tr>`;
+        if (p.A && p.B && p.N && p.Pg) linhas.push(linhaMedida('Downs', 'Plano AB / N-Pg', anguloEntreLinhas(p.A, p.B, p.N, p.Pg), '°', 4.6, 3.7));
+        if (p.Or && p.Po && p.Go && p.Gn) linhas.push(linhaMedida('Downs', 'Plano Mandibular / FH', anguloEntreLinhas(p.Or, p.Po, p.Go, p.Gn), '°', 21.9, 3.5));
+        if (p.S && p.Gn && p.Or && p.Po) linhas.push(linhaMedida('Downs', 'Eixo Y (S-Gn / FH)', anguloEntreLinhas(p.S, p.Gn, p.Or, p.Po), '°', 59.4, 3.8));
+    }
+
+    if (tipo === 'tweed' || tipo === 'todas') {
+        if (p.Or && p.Po && p.Go && p.Gn) linhas.push(linhaMedida('Tweed', 'FMA (Plano Mand. / FH)', anguloEntreLinhas(p.Or, p.Po, p.Go, p.Gn), '°', 25, 5));
+        if (p.Or && p.Po && p.L1a && p.L1i) linhas.push(linhaMedida('Tweed', 'FMIA (FH / Incisivo Inf.)', anguloEntreLinhas(p.Or, p.Po, p.L1a, p.L1i), '°', 65, 5));
+        if (p.Go && p.Gn && p.L1a && p.L1i) linhas.push(linhaMedida('Tweed', 'IMPA (Incisivo Inf. / Plano Mand.)', anguloEntreLinhas(p.Go, p.Gn, p.L1a, p.L1i), '°', 90, 5));
+    }
+
+    return linhas;
+}
+
+function renderizarTabelaResultados(linhas, mensagemVazio) {
+    if (!linhas || linhas.length === 0) return `<tr><td colspan="4">${mensagemVazio || 'Aguardando pontos...'}</td></tr>`;
+    let html = ''; let grupoAtual = null;
+    linhas.forEach(l => {
+        if (l.grupo !== grupoAtual) {
+            grupoAtual = l.grupo;
+            html += `<tr><td colspan="4" style="background:#f1f5f9; font-weight:bold; color:#0284c7;">${grupoAtual}</td></tr>`;
         }
-    } else { html = `<tr><td colspan="4">Aguardando pontos...</td></tr>`; }
-    document.getElementById('results-tbody').innerHTML = html;
+        html += `<tr><td>${l.label}</td><td>${l.valor}</td><td>${l.norma}</td><td class="${l.status}">${l.texto}</td></tr>`;
+    });
+    return html;
+}
+
+function calcularCefalometriaAvancada() {
+    const seletor = document.getElementById('tipo-analise-cefalo');
+    const tipo = seletor ? seletor.value : 'steiner';
+    const linhas = calcularResultadosCefalometricosCompleto(tipo);
+    document.getElementById('results-tbody').innerHTML = renderizarTabelaResultados(linhas);
+}
+
+// Calcula todas as linhas de resultado da análise facial (terços, perfil mole, proporções horizontais)
+function calcularResultadosFaciaisCompleto() {
+    const pts = appState.estudosImagens.facial.pontos;
+    const linhas = [];
+
+    if (pts.Tr && pts.Na && pts.Sn && pts.Me) {
+        let tSup = Math.abs(pts.Na.y - pts.Tr.y), tMed = Math.abs(pts.Sn.y - pts.Na.y), tInf = Math.abs(pts.Me.y - pts.Sn.y);
+        let total = tSup + tMed + tInf;
+        linhas.push(linhaMedida('Terços Verticais', 'Terço Superior', (tSup/total)*100, '%', 33.3, 3));
+        linhas.push(linhaMedida('Terços Verticais', 'Terço Médio', (tMed/total)*100, '%', 33.3, 3));
+        linhas.push(linhaMedida('Terços Verticais', 'Terço Inferior', (tInf/total)*100, '%', 33.3, 3));
+    }
+    if (pts.Prn && pts.Sn && pts.Ls) {
+        let nasolabial = obterAngulo(pts.Prn, pts.Sn, pts.Ls);
+        let ok = nasolabial >= 90 && nasolabial <= 110;
+        linhas.push({ grupo: 'Perfil Mole', label: 'Ângulo Nasolabial', valor: nasolabial.toFixed(1)+'°', norma: '90° – 110°', status: ok?'status-ok':'status-dev', texto: ok?'Normal':(nasolabial<90?'Fechado':'Aberto') });
+    }
+    if (pts.Gl && pts.Sn && pts.PgL) {
+        let convexidade = 180 - obterAngulo(pts.Gl, pts.Sn, pts.PgL);
+        linhas.push(linhaMedida('Perfil Mole', 'Convexidade Facial (Gl-Sn-Pg\')', convexidade, '°', 12, 4, Math.abs(convexidade-12)<=4?'Normal':(convexidade>16?'Perfil Convexo':'Perfil Côncavo')));
+    }
+    if (pts.Zy_D && pts.Zy_E && pts.Ch_D && pts.Ch_E) {
+        let largFacial = distanciaPontos(pts.Zy_D, pts.Zy_E);
+        let largBucal = distanciaPontos(pts.Ch_D, pts.Ch_E);
+        let ratio = largFacial ? (largBucal/largFacial)*100 : 0;
+        linhas.push({ grupo: 'Proporções Horizontais', label: 'Largura Bucal / Largura Bizigomática', valor: ratio.toFixed(1)+'%', norma: 'Valor de referência (sem norma rígida)', status: '', texto: 'Informativo' });
+    }
+    return linhas;
 }
 
 function calcularAnaliseFacial() {
-    const pts = appState.estudosImagens.facial.pontos; let tbody = document.getElementById('results-tbody');
-    if (pts.Tr && pts.Na && pts.Sn && pts.Me) {
-        let tSup = Math.abs(pts.Na.y - pts.Tr.y); let tMed = Math.abs(pts.Sn.y - pts.Na.y); let tInf = Math.abs(pts.Me.y - pts.Sn.y); let total = tSup + tMed + tInf;
-        tbody.innerHTML = `<tr><td>Terço Superior Facial</td><td>${((tSup/total)*100).toFixed(1)}%</td><td>33.3%</td><td class="status-ok">OK</td></tr><tr><td>Terço Médio Facial</td><td>${((tMed/total)*100).toFixed(1)}%</td><td>33.3%</td><td class="status-ok">OK</td></tr><tr><td>Terço Inferior Facial</td><td>${((tInf/total)*100).toFixed(1)}%</td><td>33.3%</td><td class="status-ok">OK</td></tr>`;
-    } else { tbody.innerHTML = `<tr><td colspan="4">Marque os pontos faciais.</td></tr>`; }
+    const linhas = calcularResultadosFaciaisCompleto();
+    document.getElementById('results-tbody').innerHTML = renderizarTabelaResultados(linhas, 'Marque os pontos faciais.');
 }
 
 function configureModelosInputs(m) {
@@ -281,8 +428,8 @@ function resetarBaseDeDados() {
         appState = {
             tipoEstudo: 'cefalometria',
             estudosImagens: {
-                cefalometria: { pontos: { S: null, N: null, A: null, B: null, Gn: null }, escalaVisual: 1, scalePxPerMm: 1, src: "", naturalWidth: 0, naturalHeight: 0 },
-                facial: { pontos: { Tr: null, Na: null, Sn: null, Me: null, Zy: null }, escalaVisual: 1, scalePxPerMm: 1, src: "", naturalWidth: 0, naturalHeight: 0 }
+                cefalometria: { pontos: { S: null, N: null, A: null, B: null, Pg: null, Me: null, Gn: null, Go: null, Or: null, Po: null, ENA: null, ENP: null, U1i: null, U1a: null, L1i: null, L1a: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 },
+                facial: { pontos: { Tr: null, Na: null, Gl: null, Prn: null, Sn: null, Ls: null, Me: null, PgL: null, Zy_D: null, Zy_E: null, Ch_D: null, Ch_E: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 }
             },
             historicoConsultas: [],
             imagensPaciente: {},
@@ -402,6 +549,23 @@ function importarBackupJSON(event) {
     reader.readAsText(file);
 }
 
+// Renderiza as linhas de resultado (mesmo formato usado no ecrã) como tabela HTML para o PDF impresso
+function renderizarTabelaResultadosPDF(linhas, colunas) {
+    if (!linhas || linhas.length === 0) {
+        return `<tr><td colspan="4" style="padding:6px; border:1px solid #cbd5e1; text-align:center;">Análise não executada (pontos insuficientes).</td></tr>`;
+    }
+    let html = ''; let grupoAtual = null;
+    const cor = { 'status-ok': '#16a34a', 'status-dev': '#dc2626', '': '#475569' };
+    linhas.forEach(l => {
+        if (l.grupo !== grupoAtual) {
+            grupoAtual = l.grupo;
+            html += `<tr><td colspan="4" style="padding:5px 6px; border:1px solid #cbd5e1; background:#eef2f7; font-weight:bold; color:#0284c7;">${grupoAtual}</td></tr>`;
+        }
+        html += `<tr><td style="padding:6px; border:1px solid #cbd5e1;">${l.label}</td><td style="padding:6px; border:1px solid #cbd5e1;">${l.valor}</td><td style="padding:6px; border:1px solid #cbd5e1;">${l.norma}</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${cor[l.status]||'#475569'};">${l.texto}</td></tr>`;
+    });
+    return html;
+}
+
 // GERAÇÃO ASSÍNCRONA DO CANVAS VIRTUAL (aguarda o carregamento da imagem antes de desenhar)
 function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
     return new Promise((resolve) => {
@@ -425,10 +589,16 @@ function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
                 if(p.S && p.N) drawLine({x:p.S.x,y:p.S.y},{x:p.N.x,y:p.N.y},'#0284c7',vCtx);
                 if(p.N && p.A) drawLine({x:p.N.x,y:p.N.y},{x:p.A.x,y:p.A.y},'#16a34a',vCtx);
                 if(p.N && p.B) drawLine({x:p.N.x,y:p.N.y},{x:p.B.x,y:p.B.y},'#e11d48',vCtx);
+                if(p.Go && p.Gn) drawLine({x:p.Go.x,y:p.Go.y},{x:p.Gn.x,y:p.Gn.y},'#ea580c',vCtx);
+                if(p.Or && p.Po) drawLine({x:p.Or.x,y:p.Or.y},{x:p.Po.x,y:p.Po.y},'#7c3aed',vCtx);
+                if(p.U1a && p.U1i) drawLine({x:p.U1a.x,y:p.U1a.y},{x:p.U1i.x,y:p.U1i.y},'#0891b2',vCtx);
+                if(p.L1a && p.L1i) drawLine({x:p.L1a.x,y:p.L1a.y},{x:p.L1i.x,y:p.L1i.y},'#0891b2',vCtx);
             } else if (chaveEstudo === 'facial') {
                 if(p.Tr && p.Na) drawLine({x:p.Tr.x,y:p.Tr.y},{x:p.Na.x,y:p.Na.y},'#0284c7',vCtx);
                 if(p.Na && p.Sn) drawLine({x:p.Na.x,y:p.Na.y},{x:p.Sn.x,y:p.Sn.y},'#16a34a',vCtx);
                 if(p.Sn && p.Me) drawLine({x:p.Sn.x,y:p.Sn.y},{x:p.Me.x,y:p.Me.y},'#e11d48',vCtx);
+                if(p.Prn && p.Sn) drawLine({x:p.Prn.x,y:p.Prn.y},{x:p.Sn.x,y:p.Sn.y},'#0891b2',vCtx);
+                if(p.Sn && p.Ls) drawLine({x:p.Sn.x,y:p.Sn.y},{x:p.Ls.x,y:p.Ls.y},'#0891b2',vCtx);
             }
 
             for (let k in p) {
@@ -522,7 +692,8 @@ function estiloImgSeguro(nw, nh, areaLargMm = 170, areaAltMm = 233) {
 async function exportarDossierClinicoCompletoPDF() {
     const nome = document.getElementById('paciente-nome').value;
     const cod = document.getElementById('paciente-id').value;
-    
+    let secNum = 0; // contador de secções — evita numeração manual frágil
+
     const element = document.createElement('div');
     element.style.width = '170mm'; 
     element.style.margin = '0 auto';
@@ -539,16 +710,11 @@ async function exportarDossierClinicoCompletoPDF() {
     let ashley = (m.dPm / m.s10) * 100;
     let discEspaco = m.perimetro - m.s10;
 
-    let f = appState.estudosImagens.facial.pontos;
-    let facialRows = `<tr><td colspan="4" style="padding:6px; border:1px solid #cbd5e1; text-align:center;">Análise fotométrica facial não executada.</td></tr>`;
-    if (f.Tr && f.Na && f.Sn && f.Me) {
-        let tSup = Math.abs(f.Na.y - f.Tr.y); let tMed = Math.abs(f.Sn.y - f.Na.y); let tInf = Math.abs(f.Me.y - f.Sn.y); let total = tSup + tMed + tInf;
-        facialRows = `
-            <tr><td style="padding:6px; border:1px solid #cbd5e1;">Terço Superior Facial</td><td style="padding:6px; border:1px solid #cbd5e1;">${((tSup/total)*100).toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">33.3%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#16a34a;">OK</td></tr>
-            <tr><td style="padding:6px; border:1px solid #cbd5e1;">Terço Médio Facial</td><td style="padding:6px; border:1px solid #cbd5e1;">${((tMed/total)*100).toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">33.3%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#16a34a;">OK</td></tr>
-            <tr><td style="padding:6px; border:1px solid #cbd5e1;">Terço Inferior Facial</td><td style="padding:6px; border:1px solid #cbd5e1;">${((tInf/total)*100).toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">33.3%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#16a34a;">OK</td></tr>
-        `;
-    }
+    const tipoAnaliseSelect = document.getElementById('tipo-analise-cefalo');
+    const tipoAnaliseAtual = tipoAnaliseSelect ? tipoAnaliseSelect.value : 'steiner';
+    const nomesAnalise = { steiner: 'Steiner', downs: 'Downs', tweed: 'Tweed', todas: 'Todas as Análises' };
+    let linhasCefalo = calcularResultadosCefalometricosCompleto(tipoAnaliseAtual);
+    let linhasFaciais = calcularResultadosFaciaisCompleto();
 
     // CONTEÚDO DA PÁGINA 1
     let pdfHtml = `
@@ -565,21 +731,38 @@ async function exportarDossierClinicoCompletoPDF() {
             </p>
             
             <div style="margin-top:15px;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">1. Plano Geral & Indicações Clínicas</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${++secNum}. Plano Geral & Indicações Clínicas</h3>
                 <p style="background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:9.5pt; border-radius:4px; text-align:justify; margin:0;">${document.getElementById('indicacoes-gerais').value || 'Sem indicações registadas para este caso.'}</p>
             </div>
             
             <div style="margin-top:25px;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">2. Historial de Consultas & Evolução Temporal</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${++secNum}. Historial de Consultas & Evolução Temporal</h3>
                 ${document.getElementById('table-evolution').outerHTML}
             </div>
         </div>
     `;
 
-    // CONTEÚDO DA PÁGINA 2
+    // CONTEÚDO DA PÁGINA 2 — CEFALOMETRIA + MODELOS + FACIAL
     pdfHtml += `
         <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">3. Análise Quantitativa de Modelos de Estudo</h3>
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Cefalométrica — ${nomesAnalise[tipoAnaliseAtual] || tipoAnaliseAtual}</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
+                <thead>
+                    <tr style="background:#f1f5f9;">
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Parâmetro</th>
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Medido</th>
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Norma</th>
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>${renderizarTabelaResultadosPDF(linhasCefalo)}</tbody>
+            </table>
+        </div>
+    `;
+
+    pdfHtml += `
+        <div style="page-break-before: always; page-break-inside: avoid !important;">
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
                 <thead>
                     <tr style="background:#f1f5f9;">
@@ -597,17 +780,17 @@ async function exportarDossierClinicoCompletoPDF() {
                 </tbody>
             </table>
 
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px; margin-top:25px;">4. Resultados da Triagem Fotométrica Facial</h3>
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px; margin-top:25px;">${++secNum}. Resultados da Análise Facial</h3>
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:15px;">
                 <thead>
                     <tr style="background:#f1f5f9;">
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Segmento Vertical</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Proporção Medida</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Proporção Áurea</th>
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Parâmetro</th>
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Medido</th>
+                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Norma</th>
                         <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status</th>
                     </tr>
                 </thead>
-                <tbody>${facialRows}</tbody>
+                <tbody>${renderizarTabelaResultadosPDF(linhasFaciais)}</tbody>
             </table>
             
             <p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin:0; margin-top:15px;"><strong>Conclusões & Anomalias Detetadas:</strong><br>${document.getElementById('anomalias-obs').value || 'Sem notas adicionais inseridas.'}</p>
@@ -620,7 +803,7 @@ async function exportarDossierClinicoCompletoPDF() {
         let estiloC = estiloImgSeguro(dimC.w, dimC.h);
         pdfHtml += `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">5. Cefalometria Radiográfica Computadorizada</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. Cefalometria Radiográfica Computadorizada</h3>
                 <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia.</span>
                 <img src="${cefaloImgData}" style="${estiloC} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
@@ -633,8 +816,8 @@ async function exportarDossierClinicoCompletoPDF() {
         let estiloF = estiloImgSeguro(dimF.w, dimF.h);
         pdfHtml += `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">6. Traçado Fotométrico Facial dos Terços Verticais</h3>
-                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Proporções verticais absolutas da face mapeadas digitalmente.</span>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. Traçado Fotométrico Facial</h3>
+                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Marcos e proporções faciais mapeados digitalmente.</span>
                 <img src="${facialImgData}" style="${estiloF} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
         `;
@@ -644,11 +827,12 @@ async function exportarDossierClinicoCompletoPDF() {
     if (Object.keys(appState.imagensPaciente).length > 0) {
         let repositorio = appState.imagensPaciente;
         let keys = Object.keys(repositorio);
-        let secNum = (cefaloImgData ? 1 : 0) + (facialImgData ? 1 : 0) + 5;
+        secNum++;
+        let secRepositorio = secNum;
         
         pdfHtml += `
             <div style="page-break-before: always;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${secNum}. Repositório Iconográfico Geral</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${secRepositorio}. Repositório Iconográfico Geral</h3>
                 <p style="font-size:9pt; color:#64748b; margin:0 0 10px 0;">${keys.length} imagem(ns) registada(s) neste processo clínico.</p>
             </div>
         `;
@@ -658,7 +842,7 @@ async function exportarDossierClinicoCompletoPDF() {
             let key = keys[idx];
             let labelCard = document.querySelector(`label[for="${key}"]`);
             let txt = labelCard ? labelCard.innerText.trim() : "Exame Clínico Registado";
-            let tituloCompleto = `${secNum}.${idx+1} — ${txt}`;
+            let tituloCompleto = `${secRepositorio}.${idx+1} — ${txt}`;
 
             // Gera imagem composta (barra de título + foto num único base64)
             let imgComposta = await gerarImagemComTitulo(repositorio[key], tituloCompleto);

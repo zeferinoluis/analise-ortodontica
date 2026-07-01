@@ -16,11 +16,18 @@
 
 ## O que foi corrigido/adicionado nesta versão
 - Cálculo do **ângulo ANB** (SNA − SNB) e classificação esquelética (Classe I/II/III), que faltava.
-- Cálculo da **distância N-S em mm**, usando a escala real da calibração da régua (antes a calibração era feita mas nunca aplicada a nenhuma medida).
+- Cálculo da **distância N-S em mm**, usando a escala real da calibração da régua (antes a calibração era feita mas nunca aplicada a nenhuma medida). Valor por omissão da escala corrigido de `1` para `null`, para não simular calibração falsa.
 - Proteções contra falhas: gravar/carregar ficha antes da base de dados local estar pronta, e importação de backup `.json` inválido ou corrompido (agora mostra aviso em vez de rebentar a app).
+- **Botão de Reset Total** (instalação limpa): apaga o IndexedDB e reinicia a ficha, com dupla confirmação.
+- **Três análises cefalométricas selecionáveis** (Steiner, Downs, Tweed, ou "Todas as Análises"), com 16 marcos anatómicos disponíveis (S, N, A, B, Pg, Me, Gn, Go, Or, Po, ENA, ENP, U1/L1 borda+ápice). Inclui SNA, SNB, ANB, N-S, ângulo interincisal (comuns), SN-GoGn, U1-NA, L1-NB (Steiner), Ângulo Facial, Convexidade, Plano AB, Plano Mandibular/FH, Eixo Y (Downs), FMA, FMIA, IMPA (Tweed).
+- **Análise facial mais completa**: mantém os terços verticais, acrescenta ângulo nasolabial, convexidade facial do perfil mole, e proporção largura bucal/facial — com 12 marcos anatómicos faciais.
+- O dossiê PDF agora inclui a tabela cefalométrica completa da análise escolhida e a tabela facial completa (antes só tinha os terços verticais), com numeração de secções calculada automaticamente.
 - `manifest.json` com ícones **locais** (192, 512, e uma versão *maskable* para Android), `scope` e `id` — necessários para o PWABuilder gerar um pacote Android válido.
 - `service-worker.js` agora também guarda em cache o `manifest.json` e os ícones, e a versão de cache foi incrementada.
-- Layout, estilos (`styles.css`) e toda a lógica clínica existente mantidos sem alterações.
+- Layout e estilos (`styles.css`) mantidos sem alterações.
+
+## Nota sobre as normas cefalométricas/faciais
+Os valores de referência (Steiner 1953, Downs 1948, Tweed 1954, e proporções faciais clássicas) são os habitualmente citados em bibliografia ortodôntica-padrão. Servem como apoio de triagem — a interpretação clínica final é sempre do profissional responsável.
 
 ## Nota importante (RGPD / dados clínicos)
 Os dados dos pacientes (fotos, radiografias, nome) continuam a ficar guardados **apenas no dispositivo** (IndexedDB) e o backup exportado é um `.json` sem encriptação. Isto é aceitável para uso pessoal/local, mas se a app for partilhada com outros profissionais ou dispositivos, vale a pena considerar encriptar o backup ou restringir o acesso ao ficheiro exportado.
