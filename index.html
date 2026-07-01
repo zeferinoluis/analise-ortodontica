@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OrtoAnalytic Pro v7.0 — Certificação de Diagnóstico Ortodôntico</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">OrtoAnalytic <span>Pro v7.0</span></div>
+        <nav>
+            <button onclick="switchTab('pacientes')" class="nav-btn active" id="btn-pacientes">Ficha & Documentação</button>
+            <button onclick="switchTab('analise')" class="nav-btn" id="btn-analise">Análise Digital</button>
+            <button onclick="switchTab('historico')" class="nav-btn" id="btn-historico">Evolução & Exportação</button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section id="tab-pacientes" class="tab-content active">
+            <div class="db-control-panel" style="background: #e0f2fe; padding: 15px; border-radius: 6px; margin-bottom: 20px; display: flex; gap: 12px; align-items: center; border-left: 5px solid #0284c7; flex-wrap: wrap;">
+                <strong>Base de Dados Local (IndexedDB):</strong>
+                <button class="action-btn" onclick="gravarPacienteNaBD()" style="margin:0; width:auto; background:#16a34a; color:white; border:none;">Guardar Ficha Local</button>
+                <button class="action-btn" onclick="carregarPacienteDaBD()" style="margin:0; width:auto; background:#0284c7; color:white; border:none;">Carregar por ID</button>
+                <button class="action-btn" onclick="resetarBaseDeDados()" style="margin:0; width:auto; background:#dc2626; color:white; border:none;">Reset Total (Instalação Limpa)</button>
+                
+                <span style="border-left: 1px solid #cbd5e1; height: 20px; margin: 0 10px;"></span>
+                
+                <strong>Nuvem / Partilha:</strong>
+                <button class="action-btn" onclick="exportarBackupJSON()" style="margin:0; width:auto; background:#475569; color:white; border:none;">Exportar Ficheiro de Backup</button>
+                <button class="action-btn" onclick="document.getElementById('import-file').click()" style="margin:0; width:auto; background:#475569; color:white; border:none;">Importar Ficheiro de Backup</button>
+                <input type="file" id="import-file" accept=".json" onchange="importarBackupJSON(event)" style="display:none;">
+                
+                <span id="db-status" style="font-size:0.9rem; font-weight:bold; color:#0369a1; margin-left:auto;">A ligar...</span>
+            </div>
+
+            <h2>Ficha Clínica do Paciente</h2>
+            <form id="form-paciente" class="grid-form" onsubmit="event.preventDefault();">
+                <div class="form-group"><label>Nome Completo:</label><input type="text" id="paciente-nome" value=""></div>
+                <div class="form-group"><label>Número de Processo / ID:</label><input type="text" id="paciente-id" value=""></div>
+                <div class="form-group"><label>Data de Nascimento:</label><input type="date" id="paciente-nascimento" value=""></div>
+            </form>
+
+            <h3 style="margin-top:25px;">Indicações Gerais para o Caso</h3>
+            <textarea id="indicacoes-gerais" rows="3" placeholder="Insira o plano de tratamento geral, observações clínicas de anamnese..."></textarea>
+
+            <h3>Repositório de Imagens e Modelos (Documentação Ortodôntica)</h3>
+            <div class="media-grid">
+                <div class="media-card"><label for="img-face">Face de Frente</label><input type="file" id="img-face" onchange="previewMedia('img-face')"><div class="preview" id="prev-img-face"></div></div>
+                <div class="media-card"><label for="img-sorriso">Sorriso</label><input type="file" id="img-sorriso" onchange="previewMedia('img-sorriso')"><div class="preview" id="prev-img-sorriso"></div></div>
+                <div class="media-card"><label for="img-oclusal-sup">Oclusal Superior</label><input type="file" id="img-oclusal-sup" onchange="previewMedia('img-oclusal-sup')"><div class="preview" id="prev-img-oclusal-sup"></div></div>
+                <div class="media-card"><label for="img-oclusal-inf">Oclusal Inferior</label><input type="file" id="img-oclusal-inf" onchange="previewMedia('img-oclusal-inf')"><div class="preview" id="prev-img-oclusal-inf"></div></div>
+                <div class="media-card"><label for="img-oclusao-ant">Oclusão Anterior</label><input type="file" id="img-oclusao-ant" onchange="previewMedia('img-oclusao-ant')"><div class="preview" id="prev-img-oclusao-ant"></div></div>
+                <div class="media-card"><label for="img-oclusao-dir">Oclusão Direita</label><input type="file" id="img-oclusao-dir" onchange="previewMedia('img-oclusao-dir')"><div class="preview" id="prev-img-oclusao-dir"></div></div>
+                <div class="media-card"><label for="img-oclusao-esq">Oclusão Esquerda</label><input type="file" id="img-oclusao-esq" onchange="previewMedia('img-oclusao-esq')"><div class="preview" id="prev-img-oclusao-esq"></div></div>
+                <div class="media-card"><label for="img-perfil-dir">Perfil Direito</label><input type="file" id="img-perfil-dir" onchange="previewMedia('img-perfil-dir')"><div class="preview" id="prev-img-perfil-dir"></div></div>
+                <div class="media-card"><label for="img-perfil-esq">Perfil Esquerdo</label><input type="file" id="img-perfil-esq" onchange="previewMedia('img-perfil-esq')"><div class="preview" id="prev-img-perfil-esq"></div></div>
+                <div class="media-card"><label for="img-34-dir">Face 3/4 Direita</label><input type="file" id="img-34-dir" onchange="previewMedia('img-34-dir')"><div class="preview" id="prev-img-34-dir"></div></div>
+                <div class="media-card"><label for="img-34-esq">Face 3/4 Esquerda</label><input type="file" id="img-34-esq" onchange="previewMedia('img-34-esq')"><div class="preview" id="prev-img-34-esq"></div></div>
+                <div class="media-card"><label for="img-mod-sup">Modelo Arcada Superior</label><input type="file" id="img-mod-sup" onchange="previewMedia('img-mod-sup')"><div class="preview" id="prev-img-mod-sup"></div></div>
+                <div class="media-card"><label for="img-mod-inf">Modelo Arcada Inferior</label><input type="file" id="img-mod-inf" onchange="previewMedia('img-mod-inf')"><div class="preview" id="prev-img-mod-inf"></div></div>
+                <div class="media-card"><label for="img-ortopanto">Ortopantomografia</label><input type="file" id="img-ortopanto" onchange="previewMedia('img-ortopanto')"><div class="preview" id="prev-img-ortopanto"></div></div>
+                <div class="media-card"><label for="img-teleradio">Telerradiografia</label><input type="file" id="img-teleradio" onchange="previewMedia('img-teleradio')"><div class="preview" id="prev-img-teleradio"></div></div>
+            </div>
+        </section>
+
+        <section id="tab-analise" class="tab-content">
+            <div class="workspace">
+                <div class="panel sidebar">
+                    <h3>Módulo Clínico</h3>
+                    <select id="tipo-estudo" onchange="atualizarInterfaceEstudo()" style="width:100%; padding:8px; border-radius:4px; margin-bottom:15px;">
+                        <option value="cefalometria">Cefalometria Radiográfica</option>
+                        <option value="facial">Fotométrica Facial</option>
+                        <option value="modelos">Análise de Modelos (Modelos de Boca)</option>
+                    </select>
+
+                    <div class="form-group" style="margin-bottom: 12px;"><label>Data do Exame:</label><input type="date" id="data-exame"></div>
+                    <div id="file-uploader-area"><input type="file" id="file-input" accept="image/*" style="margin-bottom: 15px; width: 100%;"></div>
+
+                    <div id="painel-grafico-controlos">
+                        <button class="action-btn" onclick="startCalibration()">Calibrar Régua (10mm)</button>
+                        <h4 style="margin-top:15px;">Marcos Anatómicos</h4>
+                        <div id="lista-pontos-dinamica"></div>
+                    </div>
+
+                    <div id="painel-modelos-controlos" style="display:none;">
+                        <h4>Dados do Arco e Dentes (mm)</h4>
+                        <div class="form-group"><label>Soma 6 dentes antero-sup:</label><input type="number" id="m-sup6" value="45.5" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma 6 dentes antero-inf:</label><input type="number" id="m-inf6" value="35.2" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma 4 Incisivos Sup:</label><input type="number" id="m-sup4" value="32.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma 4 Incisivos Inf:</label><input type="number" id="m-inf4" value="24.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Distância Inter-Pré-Molares:</label><input type="number" id="m-distpm" value="35.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Distância Inter-Molares:</label><input type="number" id="m-distm" value="47.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Perímetro de Arco Disponível:</label><input type="number" id="m-perimetro" value="74.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma Mesiostial 10 dentes:</label><input type="number" id="m-soma10" value="78.0" oninput="executarCalculosModelosPuros()"></div>
+                        <button class="save-btn" onclick="processarEGuardarModelos()">Guardar Modelos</button>
+                    </div>
+
+                    <button id="btn-salvar-grafico" class="save-btn" onclick="salvarAnaliseAtual()">Guardar Traçado</button>
+                </div>
+
+                <div class="viewport" id="viewport-grafico">
+                    <div class="canvas-wrapper" id="capture-target-workspace">
+                        <img id="source-image" src="" alt="" style="display:none; pointer-events: none;">
+                        <canvas id="main-canvas"></canvas>
+                    </div>
+                </div>
+
+                <div class="panel results-panel">
+                    <h3>Resultados Atuais</h3>
+                    <div id="container-tabelas-resultados">
+                        <table id="table-results">
+                            <thead id="table-header-dinamico">
+                                <tr><th>Parâmetro</th><th>Medido</th><th>Norma</th><th>Status</th></tr>
+                            </thead>
+                            <tbody id="results-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <h3 style="margin-top:20px;">Registo de Anomalias</h3>
+                    <textarea id="anomalias-obs" rows="3" placeholder="Insira observações..."></textarea>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-historico" class="tab-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background:white; padding:15px; border-radius:8px; border:1px solid #cbd5e1;">
+                <div>
+                    <h2 style="margin:0; font-size:1.4rem;">Evolução Temporal do Paciente</h2>
+                    <span style="font-size:0.85rem; color:#64748b;">Emita o dossiê clínico unificado sem cortes a partir deste painel.</span>
+                </div>
+                <button class="pdf-btn" onclick="exportarDossierClinicoCompletoPDF()" style="margin:0; width:auto; padding: 0.75rem 2.5rem; background:#16a34a;">Gerar Dossiê Clínico Completo (PDF)</button>
+            </div>
+            <div class="panel">
+                <table id="table-evolution">
+                    <thead>
+                        <tr><th>Data do Exame</th><th>Tipo de Análise</th><th>Métricas Detetadas</th><th>Observações Clínicas</th></tr>
+                    </thead>
+                    <tbody id="evolution-tbody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('service-worker.js').catch(function(err) {
+                    console.log('Falha ao registar o Service Worker:', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

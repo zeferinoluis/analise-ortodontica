@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "OrtoAnalytic Pro v7.0",
+  "short_name": "OrtoAnalytic",
+  "description": "Certificação de Diagnóstico Ortodôntico e Cefalometria Digital",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "lang": "pt-PT",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
