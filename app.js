@@ -10,7 +10,8 @@ let appState = {
     },
     historicoConsultas: [],
     imagensPaciente: {},
-    dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 }
+    dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 },
+    modelosRegistados: false
 };
 
 let db;
@@ -68,6 +69,10 @@ request.onsuccess = function(e) {
     db = e.target.result;
     document.getElementById('db-status').innerText = "✓ Base de Dados Ativa";
 };
+request.onerror = function() {
+    document.getElementById('db-status').innerText = "✗ Base de dados indisponível";
+    alert("Não foi possível abrir a base de dados local (o navegador pode estar em modo privado ou com o armazenamento bloqueado). A app funciona, mas Guardar/Carregar ficha local não estarão disponíveis. Use Exportar/Importar Ficheiro de Backup como alternativa.");
+};
 
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -121,8 +126,10 @@ function atualizarInterfaceEstudo() {
 }
 
 function previewMedia(inputId) {
-    const file = document.getElementById(inputId).files[0];
+    const inputEl = document.getElementById(inputId);
+    const file = inputEl.files[0];
     if (!file) return;
+    inputEl.value = '';
     const reader = new FileReader();
     reader.onload = function(event) {
         let tempImg = new Image(); tempImg.src = event.target.result;
@@ -168,7 +175,12 @@ function selectPoint(pName) {
     document.getElementById(`pt-${pName}`).classList.add('active');
 }
 
-function startCalibration() { appState.isCalibrating = true; appState.calibrationPoints = []; alert('Calibração: Marque 10mm.'); }
+function startCalibration() {
+    let cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    if (!cEstudo || !cEstudo.src) { alert('Carregue primeiro uma imagem antes de calibrar a régua.'); return; }
+    appState.isCalibrating = true; appState.calibrationPoints = [];
+    alert('Calibração: marque 2 pontos com 10mm reais de distância entre si.');
+}
 
 canvas.addEventListener('click', function(e) {
     const rect = canvas.getBoundingClientRect();
@@ -177,11 +189,23 @@ canvas.addEventListener('click', function(e) {
 
     if (appState.isCalibrating) {
         appState.calibrationPoints.push({x, y});
+        // Marca visual do ponto de calibração
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.fillStyle = '#eab308'; ctx.fill();
+        ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2; ctx.stroke();
         if (appState.calibrationPoints.length === 2) {
             let dx = appState.calibrationPoints[1].x - appState.calibrationPoints[0].x;
             let dy = appState.calibrationPoints[1].y - appState.calibrationPoints[0].y;
-            cEstudo.scalePxPerMm = (Math.sqrt(dx*dx + dy*dy) / cEstudo.escalaVisual) / 10;
-            appState.isCalibrating = false; alert('Régua calibrada!');
+            let distPx = Math.sqrt(dx*dx + dy*dy);
+            if (distPx < 5) {
+                appState.isCalibrating = false; redrawCanvas();
+                alert('Pontos demasiado próximos — calibração cancelada. Tente novamente.');
+                return;
+            }
+            cEstudo.scalePxPerMm = (distPx / cEstudo.escalaVisual) / 10;
+            appState.isCalibrating = false;
+            redrawCanvas();
+            alert('Régua calibrada!');
         }
         return;
     }
@@ -193,7 +217,7 @@ canvas.addEventListener('click', function(e) {
 });
 
 function drawLine(p1, p2, color, targetCtx = ctx) { targetCtx.beginPath(); targetCtx.moveTo(p1.x, p1.y); targetCtx.lineTo(p2.x, p2.y); targetCtx.strokeStyle = color; targetCtx.lineWidth = 4; targetCtx.stroke(); }
-function obterAngulo(p1, p2, p3) { let ab = Math.sqrt(pow2(p2.x-p1.x)+pow2(p2.y-p1.y)); let bc = Math.sqrt(pow2(p3.x-p2.x)+pow2(p3.y-p2.y)); let ac = Math.sqrt(pow2(p3.x-p1.x)+pow2(p3.y-p1.y)); return (Math.acos((pow2(ab)+pow2(bc)-pow2(ac))/(2*ab*bc))*180)/Math.PI; }
+function obterAngulo(p1, p2, p3) { let ab = Math.sqrt(pow2(p2.x-p1.x)+pow2(p2.y-p1.y)); let bc = Math.sqrt(pow2(p3.x-p2.x)+pow2(p3.y-p2.y)); let ac = Math.sqrt(pow2(p3.x-p1.x)+pow2(p3.y-p1.y)); if (!ab || !bc) return 0; let cos = (pow2(ab)+pow2(bc)-pow2(ac))/(2*ab*bc); cos = Math.max(-1, Math.min(1, cos)); return (Math.acos(cos)*180)/Math.PI; }
 function pow2(x) { return x*x; }
 function distanciaPontos(p1, p2) { return Math.sqrt(pow2(p2.x-p1.x) + pow2(p2.y-p1.y)); }
 // Ângulo (0-180°) entre a reta que passa por (a1,a2) e a reta que passa por (b1,b2), independente do vértice comum
@@ -394,6 +418,7 @@ function executarCalculosModelosPuros() {
 
 function processarEGuardarModelos() {
     executarCalculosModelosPuros();
+    appState.modelosRegistados = true;
     appState.historicoConsultas.push({ data: document.getElementById('data-exame').value, tipo: 'MODELOS', resumo: `Bolton: ${((appState.dadosModelosBackup.sInf6/appState.dadosModelosBackup.sSup6)*100).toFixed(1)}%`, obs: document.getElementById('anomalias-obs').value });
     alert('Modelos registados!');
 }
@@ -415,7 +440,7 @@ function salvarAnaliseAtual() {
 
 function renderHistorico() {
     const tbody = document.getElementById('evolution-tbody'); tbody.innerHTML = '';
-    appState.historicoConsultas.forEach(h => { tbody.innerHTML += `<tr><td><strong>${h.data}</strong></td><td>${h.tipo}</td><td>${h.resumo}</td><td>${h.obs || 'Sem anomalias.'}</td></tr>`; });
+    appState.historicoConsultas.forEach(h => { tbody.innerHTML += `<tr><td><strong>${escaparHTML(h.data)}</strong></td><td>${escaparHTML(h.tipo)}</td><td>${escaparHTML(h.resumo)}</td><td>${escaparHTML(h.obs) || 'Sem anomalias.'}</td></tr>`; });
 }
 
 function resetarBaseDeDados() {
@@ -433,7 +458,8 @@ function resetarBaseDeDados() {
             },
             historicoConsultas: [],
             imagensPaciente: {},
-            dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 }
+            dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 },
+            modelosRegistados: false
         };
         document.getElementById('paciente-nome').value = '';
         document.getElementById('paciente-id').value = '';
@@ -473,6 +499,52 @@ function reabrirBD() {
     };
 }
 
+// Estrutura por omissão do appState — usada para fundir backups antigos sem campos novos
+function appStatePorOmissao() {
+    return {
+        tipoEstudo: 'cefalometria',
+        estudosImagens: {
+            cefalometria: { pontos: { S: null, N: null, A: null, B: null, Pg: null, Me: null, Gn: null, Go: null, Or: null, Po: null, ENA: null, ENP: null, U1i: null, U1a: null, L1i: null, L1a: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 },
+            facial: { pontos: { Tr: null, Na: null, Gl: null, Prn: null, Sn: null, Ls: null, Me: null, PgL: null, Zy_D: null, Zy_E: null, Ch_D: null, Ch_E: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 }
+        },
+        historicoConsultas: [],
+        imagensPaciente: {},
+        dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 },
+        modelosRegistados: false
+    };
+}
+
+// Funde um appState carregado (BD ou backup) com a estrutura atual — backups antigos não rebentam a app
+function normalizarAppState(carregado) {
+    const base = appStatePorOmissao();
+    if (!carregado || typeof carregado !== 'object') return base;
+    const resultado = base;
+    resultado.tipoEstudo = ['cefalometria','facial','modelos'].includes(carregado.tipoEstudo) ? carregado.tipoEstudo : 'cefalometria';
+    resultado.historicoConsultas = Array.isArray(carregado.historicoConsultas) ? carregado.historicoConsultas : [];
+    resultado.imagensPaciente = (carregado.imagensPaciente && typeof carregado.imagensPaciente === 'object') ? carregado.imagensPaciente : {};
+    resultado.dadosModelosBackup = Object.assign(resultado.dadosModelosBackup, carregado.dadosModelosBackup || {});
+    resultado.modelosRegistados = carregado.modelosRegistados === true;
+    ['cefalometria','facial'].forEach(k => {
+        const src = carregado.estudosImagens && carregado.estudosImagens[k];
+        if (src && typeof src === 'object') {
+            resultado.estudosImagens[k].pontos = Object.assign(resultado.estudosImagens[k].pontos, src.pontos || {});
+            resultado.estudosImagens[k].escalaVisual = src.escalaVisual || 1;
+            resultado.estudosImagens[k].scalePxPerMm = src.scalePxPerMm || null;
+            resultado.estudosImagens[k].src = src.src || "";
+            resultado.estudosImagens[k].naturalWidth = src.naturalWidth || 0;
+            resultado.estudosImagens[k].naturalHeight = src.naturalHeight || 0;
+        }
+    });
+    return resultado;
+}
+
+// Escapa texto livre antes de o injetar em HTML (PDF) — evita que "<" num nome parta a renderização
+function escaparHTML(txt) {
+    return String(txt == null ? '' : txt)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function gravarPacienteNaBD() {
     if (!db) return alert("Base de dados ainda não está pronta. Aguarde um instante e tente novamente.");
     const idPac = document.getElementById('paciente-id').value;
@@ -481,7 +553,7 @@ function gravarPacienteNaBD() {
     try {
         const transaction = db.transaction(["pacientes"], "readwrite");
         transaction.objectStore("pacientes").put(pacote);
-        transaction.onsuccess = function() { document.getElementById('db-status').innerText = "✓ Sincronizado"; alert("Ficha sincronizada!"); };
+        transaction.oncomplete = function() { document.getElementById('db-status').innerText = "✓ Sincronizado"; alert("Ficha sincronizada!"); };
         transaction.onerror = function() { alert("Erro ao guardar na base de dados local."); };
     } catch (err) { alert("Erro ao guardar: " + err.message); }
 }
@@ -496,7 +568,7 @@ function carregarPacienteDaBD() {
             let res = e.target.result; if (!res) return alert("Registo ausente.");
             try {
                 document.getElementById('paciente-nome').value = res.nome; document.getElementById('paciente-nascimento').value = res.nascimento; document.getElementById('indicacoes-gerais').value = res.indicacoes; document.getElementById('anomalias-obs').value = res.obs;
-                appState = JSON.parse(res.appStateBackup);
+                appState = normalizarAppState(JSON.parse(res.appStateBackup));
 
                 configureModelosInputs(appState.dadosModelosBackup);
                 document.querySelectorAll('.preview').forEach(div => div.style.backgroundImage = 'none');
@@ -531,7 +603,7 @@ function importarBackupJSON(event) {
         }
         try {
             document.getElementById('paciente-id').value = dados.id || ''; document.getElementById('paciente-nome').value = dados.nome || ''; document.getElementById('paciente-nascimento').value = dados.nascimento || ''; document.getElementById('indicacoes-gerais').value = dados.indicacoes || ''; document.getElementById('anomalias-obs').value = dados.obs || '';
-            appState = dados.appState;
+            appState = normalizarAppState(dados.appState);
 
             configureModelosInputs(appState.dadosModelosBackup);
             document.querySelectorAll('.preview').forEach(div => div.style.backgroundImage = 'none');
@@ -550,7 +622,7 @@ function importarBackupJSON(event) {
 }
 
 // Renderiza as linhas de resultado (mesmo formato usado no ecrã) como tabela HTML para o PDF impresso
-function renderizarTabelaResultadosPDF(linhas, colunas) {
+function renderizarTabelaResultadosPDF(linhas) {
     if (!linhas || linhas.length === 0) {
         return `<tr><td colspan="4" style="padding:6px; border:1px solid #cbd5e1; text-align:center;">Análise não executada (pontos insuficientes).</td></tr>`;
     }
@@ -704,6 +776,11 @@ async function exportarDossierClinicoCompletoPDF() {
     let cefaloImgData = await gerarCanvasVirtualFundidoAsync('cefalometria');
     let facialImgData = await gerarCanvasVirtualFundidoAsync('facial');
 
+    const nomeSafe = escaparHTML(nome);
+    const codSafe = escaparHTML(cod);
+    const indicacoesSafe = escaparHTML(document.getElementById('indicacoes-gerais').value);
+    const anomaliasSafe = escaparHTML(document.getElementById('anomalias-obs').value);
+
     let m = appState.dadosModelosBackup;
     let boltonAnt = (m.sInf6 / m.sSup6) * 100;
     let korkhausEsp = (m.sSup4 * 100) / 81;
@@ -725,14 +802,14 @@ async function exportarDossierClinicoCompletoPDF() {
             </div>
             
             <p style="font-size:10pt; line-height:1.6; margin-bottom:25px;">
-                <strong>Paciente:</strong> ${nome} <br>
-                <strong>Processo Clínico ID:</strong> ${cod}<br>
+                <strong>Paciente:</strong> ${nomeSafe} <br>
+                <strong>Processo Clínico ID:</strong> ${codSafe}<br>
                 <strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-PT')}
             </p>
             
             <div style="margin-top:15px;">
                 <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${++secNum}. Plano Geral & Indicações Clínicas</h3>
-                <p style="background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:9.5pt; border-radius:4px; text-align:justify; margin:0;">${document.getElementById('indicacoes-gerais').value || 'Sem indicações registadas para este caso.'}</p>
+                <p style="background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:9.5pt; border-radius:4px; text-align:justify; margin:0;">${indicacoesSafe || 'Sem indicações registadas para este caso.'}</p>
             </div>
             
             <div style="margin-top:25px;">
@@ -760,9 +837,16 @@ async function exportarDossierClinicoCompletoPDF() {
         </div>
     `;
 
-    pdfHtml += `
-        <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
+    // Estados clínicos calculados com a MESMA lógica do ecrã (nunca texto fixo)
+    const stBolton = Math.abs(boltonAnt - 77.2) <= 1.6;
+    const stKorkhaus = !(m.dPm < korkhausEsp);
+    const stAshley = !(ashley < 43);
+    const stEspaco = !(discEspaco < 0);
+    const corOK = '#16a34a', corDev = '#dc2626';
+
+    let blocoModelos;
+    if (appState.modelosRegistados) {
+        blocoModelos = `
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
                 <thead>
                     <tr style="background:#f1f5f9;">
@@ -773,12 +857,20 @@ async function exportarDossierClinicoCompletoPDF() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Bolton Anterior</td><td style="padding:6px; border:1px solid #cbd5e1;">${boltonAnt.toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">77.2% ± 1.6%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#ec4899;">Massa Dentária</td></tr>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Korkhaus (Largura Alvo)</td><td style="padding:6px; border:1px solid #cbd5e1;">${korkhausEsp.toFixed(1)} mm</td><td style="padding:6px; border:1px solid #cbd5e1;">Real PM: ${m.dPm}mm</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#dc2626;">Atresia</td></tr>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Ashley Howe (Índice Basal)</td><td style="padding:6px; border:1px solid #cbd5e1;">${ashley.toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">43.0%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#eab308;">Estreitamento</td></tr>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">TSALD / Careys / Nance</td><td style="padding:6px; border:1px solid #cbd5e1;">${discEspaco.toFixed(1)} mm</td><td style="padding:6px; border:1px solid #cbd5e1;">0.0 mm</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:#dc2626;">Apinhamento</td></tr>
+                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Bolton Anterior</td><td style="padding:6px; border:1px solid #cbd5e1;">${boltonAnt.toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">77.2% ± 1.6%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stBolton?corOK:corDev};">${stBolton?'Normal':'Discrepância de Massa Dentária'}</td></tr>
+                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Korkhaus (Largura Alvo)</td><td style="padding:6px; border:1px solid #cbd5e1;">${korkhausEsp.toFixed(1)} mm</td><td style="padding:6px; border:1px solid #cbd5e1;">Real PM: ${m.dPm}mm</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stKorkhaus?corOK:corDev};">${stKorkhaus?'OK':'Atresia'}</td></tr>
+                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Ashley Howe (Índice Basal)</td><td style="padding:6px; border:1px solid #cbd5e1;">${ashley.toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">43.0%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stAshley?corOK:corDev};">${stAshley?'OK':'Estreitamento'}</td></tr>
+                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">TSALD / Careys / Nance</td><td style="padding:6px; border:1px solid #cbd5e1;">${discEspaco.toFixed(1)} mm</td><td style="padding:6px; border:1px solid #cbd5e1;">0.0 mm</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stEspaco?corOK:corDev};">${stEspaco?'Sobra de Espaço':'Apinhamento'}</td></tr>
                 </tbody>
-            </table>
+            </table>`;
+    } else {
+        blocoModelos = `<p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:20px;">Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)</p>`;
+    }
+
+    pdfHtml += `
+        <div style="page-break-before: always; page-break-inside: avoid !important;">
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
+            ${blocoModelos}
 
             <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px; margin-top:25px;">${++secNum}. Resultados da Análise Facial</h3>
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:15px;">
@@ -793,7 +885,7 @@ async function exportarDossierClinicoCompletoPDF() {
                 <tbody>${renderizarTabelaResultadosPDF(linhasFaciais)}</tbody>
             </table>
             
-            <p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin:0; margin-top:15px;"><strong>Conclusões & Anomalias Detetadas:</strong><br>${document.getElementById('anomalias-obs').value || 'Sem notas adicionais inseridas.'}</p>
+            <p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin:0; margin-top:15px;"><strong>Conclusões & Anomalias Detetadas:</strong><br>${anomaliasSafe || 'Sem notas adicionais inseridas.'}</p>
         </div>
     `;
 
