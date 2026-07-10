@@ -1019,11 +1019,23 @@ function connectGDrive() {
         return;
     }
     localStorage.setItem(LS_CLIENTID, clientId);
+    updateGDriveStatusUI('A abrir a janela de autorização do Google...');
     gdriveTokenClient = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: GDRIVE_SCOPE,
+        error_callback: (err) => {
+            const tipo = (err && err.type) || 'desconhecido';
+            if (tipo === 'popup_failed_to_open') {
+                updateGDriveStatusUI('O popup de autenticação foi bloqueado. Autorize popups para este site e tente novamente.');
+                alert('O navegador bloqueou a janela de autenticação da Google.\n\nAutorize popups para este site (ícone na barra de endereço) e clique novamente em "Ligar ao Google Drive".');
+            } else if (tipo === 'popup_closed') {
+                updateGDriveStatusUI('Autenticação cancelada (janela fechada).');
+            } else {
+                updateGDriveStatusUI('Falha na autenticação: ' + tipo);
+            }
+        },
         callback: (resp) => {
-            if (resp.error) { updateGDriveStatusUI('Falha na autenticação: ' + resp.error); return; }
+            if (resp.error) { updateGDriveStatusUI('Falha na autenticação: ' + resp.error + (resp.error_description ? ' — ' + resp.error_description : '')); return; }
             gdriveAccessToken = resp.access_token;
             gdriveTokenExpira = Date.now() + (parseInt(resp.expires_in || 3500) - 60) * 1000;
             updateGDriveStatusUI('✓ Ligado ao Google Drive.');
@@ -1033,7 +1045,7 @@ function connectGDrive() {
             const c = document.getElementById('gdrive-connect-btn'); if (c) c.innerText = 'Renovar ligação';
         }
     });
-    gdriveTokenClient.requestAccessToken({ prompt: '' });
+    gdriveTokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 // Devolve um token válido ou null (pedindo renovação silenciosa/interativa quando expirado)
