@@ -553,7 +553,12 @@ function gravarPacienteNaBD() {
     try {
         const transaction = db.transaction(["pacientes"], "readwrite");
         transaction.objectStore("pacientes").put(pacote);
-        transaction.oncomplete = function() { document.getElementById('db-status').innerText = "✓ Sincronizado"; alert("Ficha sincronizada!"); gdriveAutoSyncAgendar(); };
+        transaction.oncomplete = function() {
+            document.getElementById('db-status').innerText = "✓ Sincronizado";
+            alert("Ficha sincronizada!");
+            // Se já houver ligação ativa ao Google Drive, sincroniza em segundo plano (sem bloquear nem exigir confirmação)
+            if (gdriveAccessToken) sincronizarComDriveAgora(true);
+        };
         transaction.onerror = function() { alert("Erro ao guardar na base de dados local."); };
     } catch (err) { alert("Erro ao guardar: " + err.message); }
 }
@@ -971,308 +976,182 @@ async function exportarDossierClinicoCompletoPDF() {
     html2pdf().set(opt).from(element).save();
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Sincronização com o Google Drive (appDataFolder) — OrtoAnalytic Pro
-   Mesma arquitetura da app Galimplant: OAuth (Google Identity Services),
-   ficheiro único no appDataFolder, encriptação AES-GCM opcional (PBKDF2),
-   sincronização automática ao gravar e versões diárias fixadas (keepForever).
-   O backup abrange TODAS as fichas guardadas no IndexedDB.
-   ══════════════════════════════════════════════════════════════════════════ */
-
+// ==========================================================================
+// SINCRONIZAÇÃO COM GOOGLE DRIVE (appDataFolder) — backup de todos os pacientes
+// Espelha o mesmo mecanismo usado pelo recovery.html: mesmo nome de ficheiro,
+// mesmo esquema de encriptação (PBKDF2 150000 + AES-GCM 256), para que o
+// recovery.html consiga sempre ler o que aqui é escrito.
+// ==========================================================================
 const GDRIVE_FILE_NAME = 'ortoanalytic_backup.json';
 const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-// Chaves de localStorage com prefixo próprio — evita conflitos com outras
-// apps alojadas no mesmo domínio (github.io)
-const LS_CLIENTID  = 'ortoanalytic_gdrive_clientid';
-const LS_AUTOSYNC  = 'ortoanalytic_gdrive_autosync';
-const LS_ENCRYPT   = 'ortoanalytic_gdrive_encrypt';
-const LS_LASTSYNC  = 'ortoanalytic_gdrive_lastsync';
-const LS_LASTPIN   = 'ortoanalytic_gdrive_lastpin';
 
 let gdriveTokenClient = null;
 let gdriveAccessToken = null;
-let gdriveTokenExpira = 0;
-let gdrivePassphrase = null;
-let gdriveAutoSyncTimer = null;
+let gdriveFileId = localStorage.getItem('ortoanalytic_gdrive_file_id') || null;
+let gdrivePassphraseSessao = ''; // guardada só em memória, nunca em localStorage
 
-function updateGDriveStatusUI(msg) {
-    const el = document.getElementById('gdrive-status');
-    if (el) el.innerText = msg;
+window.addEventListener('load', () => {
+    const clientIdGuardado = localStorage.getItem('ortoanalytic_gdrive_clientid');
+    if (clientIdGuardado) document.getElementById('gdrive-clientid').value = clientIdGuardado;
+
+    const encriptarGuardado = localStorage.getItem('ortoanalytic_gdrive_encrypt') === 'true';
+    document.getElementById('gdrive-encrypt').checked = encriptarGuardado;
+    document.getElementById('gdrive-passphrase').style.display = encriptarGuardado ? 'inline-block' : 'none';
+
+    atualizarUltimaSincronizacaoUI();
+});
+
+function atualizarUltimaSincronizacaoUI() {
+    const ultima = localStorage.getItem('ortoanalytic_last_backup');
+    const span = document.getElementById('gdrive-last-sync');
+    if (!ultima) { span.innerText = ''; return; }
+    const d = new Date(ultima);
+    const dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+    span.innerText = `Último backup: ${dias === 0 ? 'hoje' : 'há ' + dias + ' dia(s)'}`;
 }
 
-function gdriveInicializarUI() {
-    const saved = localStorage.getItem(LS_CLIENTID);
-    if (saved) { const inp = document.getElementById('gdriveClientId'); if (inp) inp.value = saved; }
-    const auto = document.getElementById('gdriveAutoSync');
-    if (auto) auto.checked = localStorage.getItem(LS_AUTOSYNC) === '1';
-    const enc = document.getElementById('gdriveEncrypt');
-    if (enc) enc.checked = localStorage.getItem(LS_ENCRYPT) === '1';
-}
-window.addEventListener('load', gdriveInicializarUI);
-
-function connectGDrive() {
-    const inp = document.getElementById('gdriveClientId');
-    const clientId = (inp ? inp.value : '').trim();
-    if (!clientId) { alert('Indique o Client ID OAuth do Google (o mesmo usado na Galimplant serve, porque o domínio é o mesmo).'); return; }
+function ligarGoogleDrive() {
+    const clientId = document.getElementById('gdrive-clientid').value.trim();
+    if (!clientId) { alert('Indique o Client ID OAuth do Google.'); return; }
     if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
         alert('A biblioteca do Google ainda não carregou. Verifique a ligação à internet e tente novamente.');
         return;
     }
-    localStorage.setItem(LS_CLIENTID, clientId);
-    updateGDriveStatusUI('A abrir a janela de autorização do Google...');
+    localStorage.setItem('ortoanalytic_gdrive_clientid', clientId);
+
     gdriveTokenClient = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: GDRIVE_SCOPE,
-        error_callback: (err) => {
-            const tipo = (err && err.type) || 'desconhecido';
-            if (tipo === 'popup_failed_to_open') {
-                updateGDriveStatusUI('O popup de autenticação foi bloqueado. Autorize popups para este site e tente novamente.');
-                alert('O navegador bloqueou a janela de autenticação da Google.\n\nAutorize popups para este site (ícone na barra de endereço) e clique novamente em "Ligar ao Google Drive".');
-            } else if (tipo === 'popup_closed') {
-                updateGDriveStatusUI('Autenticação cancelada (janela fechada).');
-            } else {
-                updateGDriveStatusUI('Falha na autenticação: ' + tipo);
-            }
-        },
-        callback: (resp) => {
-            if (resp.error) { updateGDriveStatusUI('Falha na autenticação: ' + resp.error + (resp.error_description ? ' — ' + resp.error_description : '')); return; }
+        callback: async (resp) => {
+            if (resp.error) { document.getElementById('gdrive-status').innerText = 'Falha na autenticação: ' + resp.error; return; }
             gdriveAccessToken = resp.access_token;
-            gdriveTokenExpira = Date.now() + (parseInt(resp.expires_in || 3500) - 60) * 1000;
-            updateGDriveStatusUI('✓ Ligado ao Google Drive.');
-            document.getElementById('gdrive-setup').style.display = 'none';
-            document.getElementById('gdrive-options').style.display = 'block';
-            ['gdrive-sync-btn','gdrive-pull-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'inline-block'; });
-            const c = document.getElementById('gdrive-connect-btn'); if (c) c.innerText = 'Renovar ligação';
+            document.getElementById('gdrive-status').innerText = '✓ Ligado';
+            document.getElementById('gdrive-sync-btn').style.display = 'inline-block';
+            document.getElementById('gdrive-connect-btn').innerText = 'Religar';
+
+            const encriptar = document.getElementById('gdrive-encrypt').checked;
+            localStorage.setItem('ortoanalytic_gdrive_encrypt', encriptar ? 'true' : 'false');
+            if (encriptar) gdrivePassphraseSessao = document.getElementById('gdrive-passphrase').value;
+
+            await sincronizarComDriveAgora();
         }
     });
-    gdriveTokenClient.requestAccessToken({ prompt: 'consent' });
+    gdriveTokenClient.requestAccessToken({ prompt: '' });
 }
 
-// Devolve um token válido ou null (pedindo renovação silenciosa/interativa quando expirado)
-function gdriveToken() {
-    if (gdriveAccessToken && Date.now() < gdriveTokenExpira) return gdriveAccessToken;
-    if (gdriveTokenClient) { gdriveTokenClient.requestAccessToken({ prompt: '' }); }
-    return null;
+function obterTodosPacientes() {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Base de dados local ainda não está pronta.'));
+        try {
+            const req = db.transaction(['pacientes'], 'readonly').objectStore('pacientes').getAll();
+            req.onsuccess = (e) => resolve(e.target.result || []);
+            req.onerror = () => reject(new Error('Falha ao ler os pacientes da base de dados local.'));
+        } catch (err) { reject(err); }
+    });
 }
 
-async function gdriveFindFile(token) {
-    const url = 'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime)&q=' +
-        encodeURIComponent(`name='${GDRIVE_FILE_NAME}' and trashed=false`);
-    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-    if (r.status === 401) { gdriveAccessToken = null; throw new Error('Sessão expirada — clique em "Renovar ligação" e repita.'); }
-    if (!r.ok) throw new Error('Falha ao procurar o ficheiro (' + r.status + ')');
+async function deriveKeyGDrive(passphrase, saltBytes, uso) {
+    const enc = new TextEncoder();
+    const baseKey = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: saltBytes, iterations: 150000, hash: 'SHA-256' }, baseKey, { name: 'AES-GCM', length: 256 }, false, [uso]);
+}
+
+function bytesParaBase64(bytes) {
+    let bin = '';
+    bytes.forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin);
+}
+
+async function encriptarPayloadGDrive(textoJSON, passphrase) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKeyGDrive(passphrase, salt, 'encrypt');
+    const dataBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(textoJSON));
+    return JSON.stringify({
+        encrypted: true,
+        salt: bytesParaBase64(salt),
+        iv: bytesParaBase64(iv),
+        data: bytesParaBase64(new Uint8Array(dataBuf))
+    });
+}
+
+async function encontrarFicheiroDrive() {
+    const url = 'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name)&q=' + encodeURIComponent(`name='${GDRIVE_FILE_NAME}' and trashed=false`);
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + gdriveAccessToken } });
+    if (!r.ok) throw new Error('Falha ao procurar o ficheiro no Drive (' + r.status + ')');
     const data = await r.json();
     return (data.files && data.files[0]) || null;
 }
 
-async function gdriveCreateFile(token) {
-    const r = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,modifiedTime', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: GDRIVE_FILE_NAME, parents: ['appDataFolder'], mimeType: 'application/json' })
+async function enviarParaDrive(conteudoTexto) {
+    const boundary = '-------ortoanalytic' + Date.now();
+    const metadata = gdriveFileId ? {} : { name: GDRIVE_FILE_NAME, parents: ['appDataFolder'] };
+    const corpo =
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\nContent-Type: application/json\r\n\r\n${conteudoTexto}\r\n` +
+        `--${boundary}--`;
+
+    const url = gdriveFileId
+        ? `https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=multipart&fields=id,headRevisionId`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,headRevisionId`;
+
+    const r = await fetch(url, {
+        method: gdriveFileId ? 'PATCH' : 'POST',
+        headers: { Authorization: 'Bearer ' + gdriveAccessToken, 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body: corpo
     });
-    if (!r.ok) throw new Error('Falha ao criar o ficheiro (' + r.status + ')');
+    if (!r.ok) throw new Error('Falha ao enviar o backup para o Drive (' + r.status + ')');
     return r.json();
 }
 
-// --- Leitura/escrita de TODAS as fichas do IndexedDB ---
-function lerTodosPacientes() {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject(new Error('Base de dados local não está pronta.'));
-        const req = db.transaction(['pacientes'], 'readonly').objectStore('pacientes').getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => reject(new Error('Falha ao ler a base de dados local.'));
-    });
-}
-
-function gravarTodosPacientes(lista) {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject(new Error('Base de dados local não está pronta.'));
-        const tx = db.transaction(['pacientes'], 'readwrite');
-        const store = tx.objectStore('pacientes');
-        store.clear();
-        (lista || []).forEach(p => { if (p && p.id) store.put(p); });
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(new Error('Falha ao gravar na base de dados local.'));
-    });
-}
-
-// --- Encriptação opcional (AES-GCM, chave derivada por PBKDF2 — formato igual ao da Galimplant) ---
-async function gdriveDerivarChave(passphrase, salt, usos) {
-    const enc = new TextEncoder();
-    const baseKey = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, baseKey, { name: 'AES-GCM', length: 256 }, false, usos);
-}
-async function gdriveEncriptar(texto, passphrase) {
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await gdriveDerivarChave(passphrase, salt, ['encrypt']);
-    const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(texto));
-    const b64 = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
-    return JSON.stringify({ encrypted: true, salt: b64(salt), iv: b64(iv), data: b64(cifrado) });
-}
-async function gdriveDesencriptar(payload, passphrase) {
-    const deB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-    const key = await gdriveDerivarChave(passphrase, deB64(payload.salt), ['decrypt']);
-    const plano = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deB64(payload.iv) }, key, deB64(payload.data));
-    return new TextDecoder().decode(plano);
-}
-
-function toggleGDriveEncrypt(checked) {
-    if (checked) {
-        const pass = window.prompt('Palavra-passe de encriptação dos dados na nuvem (use a mesma em todos os dispositivos):');
-        if (!pass) { document.getElementById('gdriveEncrypt').checked = false; return; }
-        gdrivePassphrase = pass;
-        localStorage.setItem(LS_ENCRYPT, '1');
-        alert('Encriptação ativada — o próximo envio já vai encriptado.');
-    } else {
-        gdrivePassphrase = null;
-        localStorage.setItem(LS_ENCRYPT, '0');
-    }
-}
-
-function setGDriveAutoSync(checked) {
-    localStorage.setItem(LS_AUTOSYNC, checked ? '1' : '0');
-}
-
-// Chamado por gravarPacienteNaBD() quando a sincronização automática está ligada
-function gdriveAutoSyncAgendar() {
-    if (localStorage.getItem(LS_AUTOSYNC) !== '1' || !gdriveAccessToken) return;
-    clearTimeout(gdriveAutoSyncTimer);
-    gdriveAutoSyncTimer = setTimeout(() => gdrivePush(true), 2000);
-}
-
-async function gdrivePush(silent) {
+async function marcarRevisaoPermanente(fileId, revisionId) {
+    if (!revisionId) return;
     try {
-        const token = gdriveToken();
-        if (!token) { if (!silent) alert('Ligue-se primeiro ao Google Drive.'); return; }
-        updateGDriveStatusUI('A enviar...');
-
-        let file = await gdriveFindFile(token);
-
-        // Deteção de conflito: existe versão remota mais recente do que a última sincronizada aqui?
-        const lastSync = localStorage.getItem(LS_LASTSYNC);
-        if (file && lastSync && new Date(file.modifiedTime) > new Date(lastSync)) {
-            const ok = confirm('⚠️ Existe uma versão mais recente na nuvem (provavelmente de outro dispositivo) que ainda não foi transferida para aqui.\n\nSe continuar, essa versão será SUBSTITUÍDA pelos dados deste dispositivo.\n\nRecomendado: cancele e use "Transferir da nuvem" primeiro.\n\nContinuar e substituir?');
-            if (!ok) { updateGDriveStatusUI('Envio cancelado (conflito).'); return; }
-        }
-
-        const pacientes = await lerTodosPacientes();
-        let corpo = JSON.stringify({ app: 'ortoanalytic', versao: 7, exportadoEm: new Date().toISOString(), pacientes });
-
-        if (localStorage.getItem(LS_ENCRYPT) === '1') {
-            if (!gdrivePassphrase) {
-                gdrivePassphrase = window.prompt('Palavra-passe de encriptação dos dados na nuvem:');
-                if (!gdrivePassphrase) { updateGDriveStatusUI('Envio cancelado (sem palavra-passe).'); return; }
-            }
-            corpo = await gdriveEncriptar(corpo, gdrivePassphrase);
-        }
-
-        if (!file) file = await gdriveCreateFile(token);
-
-        // uploadType=media suporta ficheiros grandes (as fichas incluem fotos/radiografias em base64)
-        const up = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${file.id}?uploadType=media&fields=id,modifiedTime`, {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}`, {
             method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-            body: corpo
+            headers: { Authorization: 'Bearer ' + gdriveAccessToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keepForever: true })
         });
-        if (!up.ok) throw new Error('Falha no envio (' + up.status + ')');
-        const meta = await up.json();
-        localStorage.setItem(LS_LASTSYNC, meta.modifiedTime || new Date().toISOString());
-        updateGDriveStatusUI('✓ Sincronizado às ' + new Date().toLocaleTimeString('pt-PT'));
-        gdrivePinRevisaoDiaria(token, file.id).catch(() => {});
-        if (!silent) alert('Backup enviado para o Google Drive.');
-    } catch (e) {
-        updateGDriveStatusUI('Erro ao sincronizar: ' + e.message);
-        if (!silent) alert('Erro ao sincronizar: ' + e.message);
-    }
+    } catch (e) { /* não crítico: a versão fica na cache normal do Drive mesmo que isto falhe */ }
 }
 
-// Fixa (keepForever) a última revisão, no máximo uma vez por dia — histórico diário recuperável
-async function gdrivePinRevisaoDiaria(token, fileId) {
-    const hoje = new Date().toISOString().slice(0, 10);
-    if (localStorage.getItem(LS_LASTPIN) === hoje) return;
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=revisions(id,modifiedTime)`, { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) return;
-    const data = await r.json();
-    const revs = (data.revisions || []);
-    if (!revs.length) return;
-    const ultima = revs[revs.length - 1];
-    const p = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${ultima.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keepForever: true })
-    });
-    if (p.ok) localStorage.setItem(LS_LASTPIN, hoje);
-}
-
-async function gdrivePull() {
+async function sincronizarComDriveAgora(silencioso) {
+    if (!gdriveAccessToken) { if (!silencioso) alert('Ligue-se primeiro ao Google Drive.'); return; }
     try {
-        const token = gdriveToken();
-        if (!token) { alert('Ligue-se primeiro ao Google Drive.'); return; }
+        document.getElementById('gdrive-status').innerText = 'A sincronizar...';
+        const pacientes = await obterTodosPacientes();
+        const payload = { pacientes, exportadoEm: new Date().toISOString(), origem: 'OrtoAnalytic Pro v7.0' };
+        let conteudoTexto = JSON.stringify(payload);
 
-        const file = await gdriveFindFile(token);
-        if (!file) { alert('Ainda não existe nenhum backup nesta conta Google. Use "Enviar agora" primeiro.'); return; }
-
-        if (!confirm('Transferir o backup da nuvem vai SUBSTITUIR todas as fichas guardadas neste dispositivo pelas da nuvem.\n\nContinuar?')) return;
-
-        updateGDriveStatusUI('A transferir...');
-        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
-        if (!r.ok) throw new Error('Falha ao transferir (' + r.status + ')');
-        let texto = await r.text();
-
-        let dados;
-        try { dados = JSON.parse(texto); } catch (e) { throw new Error('O conteúdo na nuvem não é JSON válido.'); }
-
-        if (dados && dados.encrypted === true) {
-            if (!gdrivePassphrase) {
-                gdrivePassphrase = window.prompt('Este backup está encriptado. Palavra-passe:');
-                if (!gdrivePassphrase) { updateGDriveStatusUI('Transferência cancelada.'); return; }
+        const encriptar = document.getElementById('gdrive-encrypt').checked;
+        if (encriptar) {
+            const passphrase = gdrivePassphraseSessao || document.getElementById('gdrive-passphrase').value;
+            if (!passphrase) {
+                document.getElementById('gdrive-status').innerText = '✓ Ligado';
+                if (!silencioso) alert('Indique a palavra-passe de encriptação antes de sincronizar.');
+                return;
             }
-            try {
-                texto = await gdriveDesencriptar(dados, gdrivePassphrase);
-                dados = JSON.parse(texto);
-            } catch (e) {
-                gdrivePassphrase = null;
-                throw new Error('Palavra-passe incorreta — não foi possível desencriptar.');
-            }
+            gdrivePassphraseSessao = passphrase;
+            conteudoTexto = await encriptarPayloadGDrive(conteudoTexto, passphrase);
         }
 
-        if (!dados || !Array.isArray(dados.pacientes)) throw new Error('Estrutura do backup inesperada.');
-
-        await gravarTodosPacientes(dados.pacientes);
-        localStorage.setItem(LS_LASTSYNC, file.modifiedTime || new Date().toISOString());
-        updateGDriveStatusUI('✓ Sincronizado às ' + new Date().toLocaleTimeString('pt-PT'));
-
-        // Se a ficha aberta no ecrã existir no backup, recarrega-a
-        const idAtual = document.getElementById('paciente-id').value;
-        const encontrada = idAtual ? dados.pacientes.find(p => p && p.id === idAtual) : null;
-        alert('Backup restaurado: ' + dados.pacientes.length + ' ficha(s).' + (encontrada ? '\n\nA ficha aberta será recarregada da versão da nuvem.' : ''));
-        if (encontrada) carregarFichaNoEcra(encontrada);
-    } catch (e) {
-        updateGDriveStatusUI('Erro: ' + e.message);
-        alert('Erro ao transferir da nuvem: ' + e.message);
-    }
-}
-
-// Aplica um pacote de ficha (formato do IndexedDB) ao ecrã — reutilizado pelo gdrivePull
-function carregarFichaNoEcra(pacote) {
-    try {
-        document.getElementById('paciente-id').value = pacote.id || '';
-        document.getElementById('paciente-nome').value = pacote.nome || '';
-        document.getElementById('paciente-nascimento').value = pacote.nascimento || '';
-        document.getElementById('indicacoes-gerais').value = pacote.indicacoes || '';
-        document.getElementById('anomalias-obs').value = pacote.obs || '';
-        let estado = null;
-        try { estado = JSON.parse(pacote.appStateBackup || 'null'); } catch (e) {}
-        appState = normalizarAppState(estado);
-        configureModelosInputs(appState.dadosModelosBackup);
-        document.querySelectorAll('.preview').forEach(div => div.style.backgroundImage = 'none');
-        for (let key in (appState.imagensPaciente || {})) {
-            let pBox = document.getElementById(`prev-${key}`); if (pBox) pBox.style.backgroundImage = `url(${appState.imagensPaciente[key]})`;
+        if (!gdriveFileId) {
+            const existente = await encontrarFicheiroDrive();
+            if (existente) { gdriveFileId = existente.id; localStorage.setItem('ortoanalytic_gdrive_file_id', gdriveFileId); }
         }
-        atualizarInterfaceEstudo();
-    } catch (e) {
-        alert('Ficha restaurada na base de dados, mas houve um problema a mostrá-la no ecrã: ' + e.message);
+
+        const resultado = await enviarParaDrive(conteudoTexto);
+        if (resultado.id) { gdriveFileId = resultado.id; localStorage.setItem('ortoanalytic_gdrive_file_id', gdriveFileId); }
+        await marcarRevisaoPermanente(gdriveFileId, resultado.headRevisionId);
+
+        const agora = new Date().toISOString();
+        localStorage.setItem('ortoanalytic_last_backup', agora);
+        localStorage.setItem('ortoanalytic_gdrive_last_sync_time', agora);
+        document.getElementById('gdrive-status').innerText = '✓ Ligado';
+        atualizarUltimaSincronizacaoUI();
+        if (!silencioso) alert('Backup sincronizado com o Google Drive (' + pacientes.length + ' ficha(s)).');
+    } catch (err) {
+        document.getElementById('gdrive-status').innerText = '✓ Ligado (falhou última sincronização)';
+        if (!silencioso) alert('Erro ao sincronizar com o Google Drive: ' + err.message);
     }
 }

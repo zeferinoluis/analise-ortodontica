@@ -29,5 +29,13 @@
 ## Nota sobre as normas cefalométricas/faciais
 Os valores de referência (Steiner 1953, Downs 1948, Tweed 1954, e proporções faciais clássicas) são os habitualmente citados em bibliografia ortodôntica-padrão. Servem como apoio de triagem — a interpretação clínica final é sempre do profissional responsável.
 
+## Nova funcionalidade: Sincronização com Google Drive
+- Painel "Sincronização (Google Drive)" no separador "Ficha & Documentação", junto ao painel de Base de Dados Local.
+- Usa o mesmo Client ID OAuth que já configuraste (Google Cloud Console → OAuth consent + credenciais tipo "Web application", com o domínio `zeferinoluis.github.io` autorizado).
+- O backup é guardado na pasta privada `appDataFolder` da conta Google (invisível no Drive normal do utilizador, só acessível por esta app e pelo `recovery.html`).
+- Sincronização automática em segundo plano sempre que gravas uma ficha localmente, desde que já estejas ligado.
+- Opção de encriptar o backup (PBKDF2 + AES-GCM 256) com uma palavra-passe à escolha — se ativada, é a mesma palavra-passe pedida no `recovery.html` para restaurar.
+- `recovery.html` já está preparado para ler este backup (procura o ficheiro `ortoanalytic_backup.json` na `appDataFolder`, com histórico de versões).
+
 ## Nota importante (RGPD / dados clínicos)
-Os dados dos pacientes (fotos, radiografias, nome) continuam a ficar guardados **apenas no dispositivo** (IndexedDB) e o backup exportado é um `.json` sem encriptação. Isto é aceitável para uso pessoal/local, mas se a app for partilhada com outros profissionais ou dispositivos, vale a pena considerar encriptar o backup ou restringir o acesso ao ficheiro exportado.
+Os dados dos pacientes (fotos, radiografias, nome) ficam guardados **no dispositivo** (IndexedDB) e, se ativares a sincronização, também na `appDataFolder` privada da tua conta Google — nunca partilhada nem visível a terceiros através do Drive normal. Recomenda-se ativar a encriptação se a conta Google usada não for de uso estritamente pessoal/profissional. O ficheiro exportado manualmente (Exportar Ficheiro de Backup) continua a ser um `.json` sem encriptação, por ser apenas a ficha atualmente aberta — evita partilhar esse ficheiro sem cuidado.
