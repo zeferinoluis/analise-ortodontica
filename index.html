@@ -10,6 +10,7 @@
     <link rel="icon" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
 
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
@@ -39,6 +40,28 @@
                 <input type="file" id="import-file" accept=".json" onchange="importarBackupJSON(event)" style="display:none;">
                 
                 <span id="db-status" style="font-size:0.9rem; font-weight:bold; color:#0369a1; margin-left:auto;">A ligar...</span>
+            </div>
+
+            <div id="gdrive-panel" style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 5px solid #0f172a;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <strong>&#9729;&#65039; Sincronização (Google Drive)</strong>
+                        <div id="gdrive-status" style="font-size:0.85rem; color:#475569;">Não ligado.</div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="action-btn" id="gdrive-connect-btn" onclick="connectGDrive()" style="margin:0; width:auto; background:#16a34a; color:white; border:none;">Ligar ao Google Drive</button>
+                        <button class="action-btn" id="gdrive-sync-btn" onclick="gdrivePush(false)" style="margin:0; width:auto; background:#0284c7; color:white; border:none; display:none;">Enviar agora</button>
+                        <button class="action-btn" id="gdrive-pull-btn" onclick="gdrivePull()" style="margin:0; width:auto; background:#0284c7; color:white; border:none; display:none;">Transferir da nuvem</button>
+                    </div>
+                </div>
+                <div id="gdrive-setup" style="margin-top:8px; font-size:0.85rem; color:#475569;">
+                    <label style="display:block; margin-bottom:4px;">Client ID OAuth do Google (o mesmo da app Galimplant serve — mesmo domínio):</label>
+                    <input type="text" id="gdriveClientId" placeholder="xxxxxxxx.apps.googleusercontent.com" style="width:100%; max-width:420px; padding:6px; border-radius:4px; border:1px solid #cbd5e1;">
+                </div>
+                <div id="gdrive-options" style="margin-top:8px; font-size:0.9rem; display:none;">
+                    <label style="margin-right:14px; font-weight:600; cursor:pointer;"><input type="checkbox" id="gdriveAutoSync" onchange="setGDriveAutoSync(this.checked)"> Sincronização automática ao gravar</label>
+                    <label style="font-weight:600; cursor:pointer;"><input type="checkbox" id="gdriveEncrypt" onchange="toggleGDriveEncrypt(this.checked)"> Encriptar dados na nuvem (recomendado — dados de saúde)</label>
+                </div>
             </div>
 
             <h2>Ficha Clínica do Paciente</h2>

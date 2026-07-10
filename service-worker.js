@@ -1,9 +1,10 @@
-const CACHE_NAME = 'ortoanalytic-cache-v7-2';
+const CACHE_NAME = 'ortoanalytic-cache-v7-4';
 
 // Assets locais — obrigatórios para a instalação offline
 const ASSETS_LOCAIS = [
   './',
   'index.html',
+  'recovery.html',
   'styles.css',
   'app.js',
   'manifest.json',
@@ -56,6 +57,11 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // Nunca intercetar a API do Google Drive nem a autenticação — têm de ir sempre
+  // à rede (a estratégia cache-first devolveria listagens/backups obsoletos).
+  if (url.hostname.endsWith('googleapis.com') || url.hostname === 'accounts.google.com') return;
+
   const ehAppShell =
     event.request.mode === 'navigate' ||
     (url.origin === self.location.origin && /\/(index\.html)?$|app\.js$|styles\.css$|manifest\.json$/.test(url.pathname));
