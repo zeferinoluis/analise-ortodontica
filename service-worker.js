@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ortoanalytic-cache-v8-0';
+const CACHE_NAME = 'ortoanalytic-cache-v10-0';
 
 // Assets locais — obrigatórios para a instalação offline
 const ASSETS_LOCAIS = [
@@ -6,7 +6,17 @@ const ASSETS_LOCAIS = [
   'index.html',
   'recovery.html',
   'styles.css',
-  'app.js',
+  'js/utils.js',
+  'js/state.js',
+  'js/database.js',
+  'js/undo-redo.js',
+  'js/canvas-editor.js',
+  'js/cephalometry.js',
+  'js/facial.js',
+  'js/models.js',
+  'js/ui.js',
+  'js/exportacao-pdf.js',
+  'js/google-drive.js',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -64,7 +74,7 @@ self.addEventListener('fetch', (event) => {
 
   const ehAppShell =
     event.request.mode === 'navigate' ||
-    (url.origin === self.location.origin && /\/(index\.html)?$|app\.js$|styles\.css$|manifest\.json$/.test(url.pathname));
+    (url.origin === self.location.origin && /\/(index\.html)?$|\/js\/[^/]+\.js$|styles\.css$|manifest\.json$/.test(url.pathname));
 
   if (ehAppShell) {
     // NETWORK-FIRST
