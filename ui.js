@@ -23,6 +23,7 @@ function atualizarInterfaceEstudo() {
     const tabelaHeader = document.getElementById('table-header-dinamico');
 
     atualizarBotoesUndoRedo();
+    atualizarRotuloInterpretacaoSugerida();
 
     if (appState.tipoEstudo === 'modelos') {
         pGrafico.style.display = 'none'; btnSalvarGrafico.style.display = 'none';

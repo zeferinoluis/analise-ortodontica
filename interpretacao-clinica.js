@@ -90,35 +90,41 @@ function interpretarTransversalModelos(korkhausEsp, dPm, ashley, discEspaco, bol
     return partes.join('');
 }
 
-// Constrói o texto de síntese completo — cada bloco só entra se houver pontos/dados suficientes
-function gerarInterpretacaoAutomatica() {
+// Constrói o texto de síntese — 'escopo' limita o texto ao módulo ativo:
+// 'cefalometria' | 'facial' | 'modelos' | 'todas' (combinado, usado por defeito se omitido)
+function gerarInterpretacaoAutomatica(escopo) {
+    escopo = escopo || 'todas';
     const partes = [];
 
-    const p = appState.estudosImagens.cefalometria.pontos;
-    const scale = appState.estudosImagens.cefalometria.scalePxPerMm;
+    if (escopo === 'cefalometria' || escopo === 'todas') {
+        const p = appState.estudosImagens.cefalometria.pontos;
+        const scale = appState.estudosImagens.cefalometria.scalePxPerMm;
 
-    let sna = null, snb = null;
-    if (p.S && p.N && p.A) sna = obterAngulo(p.S, p.N, p.A);
-    if (p.S && p.N && p.B) snb = obterAngulo(p.S, p.N, p.B);
-    if (sna !== null && snb !== null) partes.push(interpretarClasseEsqueletica(sna, snb, sna - snb));
+        let sna = null, snb = null;
+        if (p.S && p.N && p.A) sna = obterAngulo(p.S, p.N, p.A);
+        if (p.S && p.N && p.B) snb = obterAngulo(p.S, p.N, p.B);
+        if (sna !== null && snb !== null) partes.push(interpretarClasseEsqueletica(sna, snb, sna - snb));
 
-    if (p.S && p.N && p.Go && p.Gn) partes.push(interpretarPadraoVertical(anguloEntreLinhas(p.S, p.N, p.Go, p.Gn)));
+        if (p.S && p.N && p.Go && p.Gn) partes.push(interpretarPadraoVertical(anguloEntreLinhas(p.S, p.N, p.Go, p.Gn)));
 
-    if (scale) {
-        if (p.U1a && p.U1i && p.N && p.A) partes.push(interpretarIncisivosSuperiores(anguloEntreLinhas(p.U1a, p.U1i, p.N, p.A), distanciaPontoLinha(p.U1i, p.N, p.A) / scale));
-        if (p.L1a && p.L1i && p.N && p.B) partes.push(interpretarIncisivosInferiores(anguloEntreLinhas(p.L1a, p.L1i, p.N, p.B), distanciaPontoLinha(p.L1i, p.N, p.B) / scale));
+        if (scale) {
+            if (p.U1a && p.U1i && p.N && p.A) partes.push(interpretarIncisivosSuperiores(anguloEntreLinhas(p.U1a, p.U1i, p.N, p.A), distanciaPontoLinha(p.U1i, p.N, p.A) / scale));
+            if (p.L1a && p.L1i && p.N && p.B) partes.push(interpretarIncisivosInferiores(anguloEntreLinhas(p.L1a, p.L1i, p.N, p.B), distanciaPontoLinha(p.L1i, p.N, p.B) / scale));
+        }
+
+        if (p.U1a && p.U1i && p.L1a && p.L1i) partes.push(interpretarAnguloInterincisal(anguloEntreLinhas(p.U1a, p.U1i, p.L1a, p.L1i)));
     }
 
-    if (p.U1a && p.U1i && p.L1a && p.L1i) partes.push(interpretarAnguloInterincisal(anguloEntreLinhas(p.U1a, p.U1i, p.L1a, p.L1i)));
+    if (escopo === 'facial' || escopo === 'todas') {
+        const pf = appState.estudosImagens.facial.pontos;
+        let nasolabial = null, convexidade = null;
+        if (pf.Prn && pf.Sn && pf.Ls) nasolabial = obterAngulo(pf.Prn, pf.Sn, pf.Ls);
+        if (pf.Gl && pf.Sn && pf.PgL) convexidade = 180 - obterAngulo(pf.Gl, pf.Sn, pf.PgL);
+        const blocoFacial = interpretarPerfilFacial(nasolabial, convexidade);
+        if (blocoFacial) partes.push(blocoFacial);
+    }
 
-    const pf = appState.estudosImagens.facial.pontos;
-    let nasolabial = null, convexidade = null;
-    if (pf.Prn && pf.Sn && pf.Ls) nasolabial = obterAngulo(pf.Prn, pf.Sn, pf.Ls);
-    if (pf.Gl && pf.Sn && pf.PgL) convexidade = 180 - obterAngulo(pf.Gl, pf.Sn, pf.PgL);
-    const blocoFacial = interpretarPerfilFacial(nasolabial, convexidade);
-    if (blocoFacial) partes.push(blocoFacial);
-
-    if (appState.modelosRegistados) {
+    if ((escopo === 'modelos' || escopo === 'todas') && appState.modelosRegistados) {
         const m = appState.dadosModelosBackup;
         const boltonAnt = (m.sInf6 / m.sSup6) * 100;
         const korkhausEsp = (m.sSup4 * 100) / 81;
@@ -127,16 +133,33 @@ function gerarInterpretacaoAutomatica() {
         partes.push(interpretarTransversalModelos(korkhausEsp, m.dPm, ashley, discEspaco, boltonAnt));
     }
 
-    if (!partes.length) return 'Dados insuficientes para gerar uma interpretação automática (marque mais pontos anatómicos e/ou calibre a régua).';
+    if (!partes.length) {
+        const mensagensVazio = {
+            cefalometria: 'Dados insuficientes para gerar uma interpretação cefalométrica (marque mais pontos e/ou calibre a régua).',
+            facial: 'Dados insuficientes para gerar uma interpretação facial (marque os pontos do perfil mole: Prn, Sn, Ls, Gl, Pg\').',
+            modelos: 'Ainda não há modelos registados — prima "Guardar Modelos" após preencher os valores.',
+            todas: 'Dados insuficientes para gerar uma interpretação automática (marque mais pontos anatómicos e/ou calibre a régua).'
+        };
+        return mensagensVazio[escopo] || mensagensVazio.todas;
+    }
 
     return partes.filter(Boolean).join('\n\n') +
         '\n\n[Texto gerado automaticamente a partir dos valores medidos nesta ficha — sugestão de apoio à decisão, sujeita a validação clínica, exame intraoral, relação molar/canina e radiografia panorâmica antes de qualquer decisão terapêutica.]';
 }
 
-// Preenche o campo de observações com a interpretação automática, pedindo confirmação se já houver texto
+// Atualiza o rótulo do botão "Gerar Interpretação Sugerida" para indicar a que módulo se aplica
+function atualizarRotuloInterpretacaoSugerida() {
+    const btn = document.getElementById('btn-interpretacao-sugerida');
+    if (!btn) return;
+    const nomes = { cefalometria: 'Cefalometria', facial: 'Análise Facial', modelos: 'Modelos' };
+    btn.textContent = `Gerar Interpretação Sugerida (${nomes[appState.tipoEstudo] || ''})`;
+}
+
+// Preenche o campo de observações com a interpretação automática, limitada ao módulo clínico ativo
+// (Cefalometria / Facial / Modelos), pedindo confirmação se já houver texto escrito
 function preencherInterpretacaoAutomatica() {
     const campo = document.getElementById('anomalias-obs');
     if (!campo) return;
     if (campo.value.trim() && !confirm('O campo de observações já tem texto. Substituir pela interpretação sugerida automaticamente?')) return;
-    campo.value = gerarInterpretacaoAutomatica();
+    campo.value = gerarInterpretacaoAutomatica(appState.tipoEstudo);
 }
