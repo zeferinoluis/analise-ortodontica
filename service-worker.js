@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ortoanalytic-cache-v10-1';
+const CACHE_NAME = 'ortoanalytic-cache-v11-0';
 
 // Assets locais — obrigatórios para a instalação offline
 const ASSETS_LOCAIS = [
@@ -14,6 +14,7 @@ const ASSETS_LOCAIS = [
   'cephalometry.js',
   'facial.js',
   'models.js',
+  'interpretacao-clinica.js',
   'ui.js',
   'exportacao-pdf.js',
   'google-drive.js',

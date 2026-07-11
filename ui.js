@@ -118,5 +118,5 @@ function salvarAnaliseAtual() {
 
 function renderHistorico() {
     const tbody = document.getElementById('evolution-tbody'); tbody.innerHTML = '';
-    appState.historicoConsultas.forEach(h => { tbody.innerHTML += `<tr><td><strong>${escaparHTML(h.data)}</strong></td><td>${escaparHTML(h.tipo)}</td><td>${escaparHTML(h.resumo)}</td><td>${escaparHTML(h.obs) || 'Sem anomalias.'}</td></tr>`; });
+    appState.historicoConsultas.forEach(h => { tbody.innerHTML += `<tr><td><strong>${escaparHTML(h.data)}</strong></td><td>${escaparHTML(h.tipo)}</td><td>${escaparHTML(h.resumo)}</td><td>${escaparHTML(h.obs) || 'Sem observações registadas.'}</td></tr>`; });
 }
