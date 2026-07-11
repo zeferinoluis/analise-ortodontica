@@ -51,6 +51,7 @@
                 <input type="password" id="gdrive-passphrase" placeholder="Palavra-passe de encriptação" style="display:none; padding:0.5rem; border-radius:4px; border:1px solid #475569; background:#1e293b; color:white; font-size:0.85rem; min-width:200px;">
                 <button class="action-btn" onclick="ligarGoogleDrive()" id="gdrive-connect-btn" style="margin:0; width:auto; background:#16a34a; color:white; border:none;">Ligar ao Google Drive</button>
                 <button class="action-btn" onclick="sincronizarComDriveAgora()" id="gdrive-sync-btn" style="margin:0; width:auto; background:#0284c7; color:white; border:none; display:none;">Sincronizar Agora</button>
+                <button class="action-btn" onclick="restaurarDoDriveAbrirLista()" id="gdrive-restore-btn" style="margin:0; width:auto; background:#7c3aed; color:white; border:none; display:none;">Restaurar do Google Drive</button>
                 <span id="gdrive-last-sync" style="font-size:0.8rem; color:#94a3b8;"></span>
             </div>
 
@@ -181,6 +182,19 @@
             </div>
         </section>
     </main>
+
+    <div id="gdrive-restore-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:8px; width:min(560px, 92vw); max-height:80vh; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <strong>Restaurar ficha do Google Drive</strong>
+                <button class="action-btn" onclick="fecharModalRestauroDrive()" style="width:auto; margin:0; padding:0.3rem 0.7rem;">Fechar</button>
+            </div>
+            <div style="padding:14px 20px 0;">
+                <input type="text" id="gdrive-restore-filtro" oninput="filtrarListaRestauroDrive()" placeholder="Filtrar por ID ou nome..." style="width:100%; box-sizing:border-box; padding:0.55rem; border:1px solid var(--border); border-radius:4px;">
+            </div>
+            <div id="gdrive-restore-lista" style="padding:8px 20px 16px; overflow-y:auto;"></div>
+        </div>
+    </div>
 
     <script src="utils.js"></script>
     <script src="state.js"></script>

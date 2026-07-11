@@ -47,6 +47,7 @@ function ligarGoogleDrive() {
             gdriveAccessToken = resp.access_token;
             document.getElementById('gdrive-status').innerText = '✓ Ligado';
             document.getElementById('gdrive-sync-btn').style.display = 'inline-block';
+            document.getElementById('gdrive-restore-btn').style.display = 'inline-block';
             document.getElementById('gdrive-connect-btn').innerText = 'Religar';
 
             const encriptar = document.getElementById('gdrive-encrypt').checked;
@@ -122,6 +123,143 @@ async function marcarRevisaoPermanente(fileId, revisionId) {
             body: JSON.stringify({ keepForever: true })
         });
     } catch (e) { /* não crítico: a versão fica na cache normal do Drive mesmo que isto falhe */ }
+}
+
+// ==========================================================================
+// RESTAURO A PARTIR DO GOOGLE DRIVE — descarrega o backup completo (todos os
+// pacientes), desencripta se necessário, mostra uma lista para escolha e
+// grava o paciente selecionado na BD local deste dispositivo.
+// Espelha o mesmo esquema de desencriptação usado no recovery.html.
+// ==========================================================================
+
+let ultimoBackupPacientesDrive = [];
+
+async function deriveKeyGDriveDecrypt(passphrase, saltB64) {
+    const enc = new TextEncoder();
+    const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+    const baseKey = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+}
+
+async function decriptarPayloadGDrive(payload, passphrase) {
+    const key = await deriveKeyGDriveDecrypt(passphrase, payload.salt);
+    const iv = Uint8Array.from(atob(payload.iv), c => c.charCodeAt(0));
+    const data = Uint8Array.from(atob(payload.data), c => c.charCodeAt(0));
+    const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return new TextDecoder().decode(plainBuf);
+}
+
+async function restaurarDoDriveAbrirLista() {
+    if (!gdriveAccessToken) { alert('Ligue-se primeiro ao Google Drive.'); return; }
+    const statusEl = document.getElementById('gdrive-status');
+    try {
+        statusEl.innerText = 'A procurar backups...';
+        const file = await encontrarFicheiroDrive();
+        if (!file) { alert('Não foi encontrado nenhum backup nesta conta Google.'); statusEl.innerText = '✓ Ligado'; return; }
+
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers: { Authorization: 'Bearer ' + gdriveAccessToken } });
+        if (!r.ok) throw new Error('Falha ao transferir o backup (' + r.status + ')');
+        let texto = await r.text();
+        let payload = JSON.parse(texto);
+
+        if (payload && payload.encrypted === true) {
+            let pass = gdrivePassphraseSessao || document.getElementById('gdrive-passphrase').value;
+            if (!pass) pass = prompt('Este backup está encriptado. Introduza a palavra-passe de encriptação:') || '';
+            if (!pass) { statusEl.innerText = '✓ Ligado'; return; }
+            try {
+                texto = await decriptarPayloadGDrive(payload, pass);
+                payload = JSON.parse(texto);
+            } catch (e) { throw new Error('Palavra-passe incorreta ou backup corrompido.'); }
+            gdrivePassphraseSessao = pass;
+        }
+
+        if (!payload || !Array.isArray(payload.pacientes)) throw new Error('Backup sem lista de pacientes reconhecível.');
+
+        mostrarListaRestauroDrive(payload.pacientes);
+        statusEl.innerText = '✓ Ligado';
+    } catch (err) {
+        statusEl.innerText = '✓ Ligado (falhou o restauro)';
+        alert('Erro ao restaurar do Google Drive: ' + err.message);
+    }
+}
+
+function mostrarListaRestauroDrive(pacientes) {
+    ultimoBackupPacientesDrive = pacientes;
+    const modal = document.getElementById('gdrive-restore-modal');
+    const corpo = document.getElementById('gdrive-restore-lista');
+    const filtro = document.getElementById('gdrive-restore-filtro');
+    filtro.value = '';
+    corpo.innerHTML = '';
+
+    if (!pacientes.length) {
+        corpo.innerHTML = '<p style="color:#64748b; font-size:0.9rem;">Nenhuma ficha encontrada neste backup.</p>';
+    } else {
+        pacientes.forEach((pac, idx) => {
+            const linha = document.createElement('div');
+            linha.dataset.termo = `${pac.id || ''} ${pac.nome || ''}`.toLowerCase();
+            linha.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid #e2e8f0;';
+            const info = document.createElement('span');
+            info.innerHTML = `<strong>${escaparHTML(pac.id || '—')}</strong> — ${escaparHTML(pac.nome || '(sem nome)')} <span style="color:#94a3b8; font-size:0.8em;">${escaparHTML(pac.nascimento || '')}</span>`;
+            const btn = document.createElement('button');
+            btn.className = 'action-btn';
+            btn.style.cssText = 'width:auto; margin:0; background:#16a34a; color:white; border:none; flex-shrink:0;';
+            btn.textContent = 'Restaurar aqui';
+            btn.onclick = () => restaurarPacienteDoDrive(idx);
+            linha.appendChild(info);
+            linha.appendChild(btn);
+            corpo.appendChild(linha);
+        });
+    }
+    modal.style.display = 'flex';
+}
+
+function filtrarListaRestauroDrive() {
+    const termo = document.getElementById('gdrive-restore-filtro').value.trim().toLowerCase();
+    document.querySelectorAll('#gdrive-restore-lista > div').forEach(div => {
+        div.style.display = (!termo || (div.dataset.termo || '').includes(termo)) ? 'flex' : 'none';
+    });
+}
+
+function fecharModalRestauroDrive() {
+    document.getElementById('gdrive-restore-modal').style.display = 'none';
+}
+
+function restaurarPacienteDoDrive(indice) {
+    const pac = ultimoBackupPacientesDrive[indice];
+    if (!pac) return;
+    if (!confirm(`Restaurar a ficha de "${pac.nome || pac.id}" para este dispositivo?\n\nIsto substitui os dados atualmente no ecrã pelos dados do backup, e grava/atualiza o ID "${pac.id}" na base de dados local deste dispositivo.`)) return;
+
+    try {
+        document.getElementById('paciente-nome').value = pac.nome || '';
+        document.getElementById('paciente-id').value = pac.id || '';
+        document.getElementById('paciente-nascimento').value = pac.nascimento || '';
+        document.getElementById('indicacoes-gerais').value = pac.indicacoes || '';
+        document.getElementById('anomalias-obs').value = pac.obs || '';
+
+        appState = normalizarAppState(JSON.parse(pac.appStateBackup));
+        configureModelosInputs(appState.dadosModelosBackup);
+
+        document.querySelectorAll('.preview').forEach(div => div.style.backgroundImage = 'none');
+        for (let key in (appState.imagensPaciente || {})) {
+            let pBox = document.getElementById(`prev-${key}`);
+            if (pBox) pBox.style.backgroundImage = `url(${appState.imagensPaciente[key]})`;
+        }
+
+        reiniciarHistoricoUndo();
+        atualizarInterfaceEstudo();
+        if (typeof renderHistorico === 'function') renderHistorico();
+
+        gravarPacoteDiretoNaBD(pac).then(() => {
+            document.getElementById('db-status').innerText = '✓ Sincronizado';
+            fecharModalRestauroDrive();
+            alert('Ficha restaurada e guardada neste dispositivo!');
+        }).catch(err => {
+            fecharModalRestauroDrive();
+            alert('A ficha foi restaurada no ecrã, mas falhou ao gravar na base de dados local: ' + err.message);
+        });
+    } catch (err) {
+        alert('Erro ao aplicar a ficha restaurada: ' + err.message);
+    }
 }
 
 async function sincronizarComDriveAgora(silencioso) {

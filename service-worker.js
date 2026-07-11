@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ortoanalytic-cache-v11-0';
+const CACHE_NAME = 'ortoanalytic-cache-v11-1';
 
 // Assets locais — obrigatórios para a instalação offline
 const ASSETS_LOCAIS = [

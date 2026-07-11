@@ -118,6 +118,21 @@ function carregarPacienteDaBD() {
     } catch (err) { alert("Erro ao carregar: " + err.message); }
 }
 
+// Grava um pacote {id, nome, nascimento, indicacoes, obs, appStateBackup} diretamente na BD local,
+// sem depender dos campos do formulário nem dos alertas de gravarPacienteNaBD() — usada pelo restauro do Drive.
+function gravarPacoteDiretoNaBD(pacote) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error('Base de dados local ainda não está pronta. Aguarde um instante e tente novamente.'));
+        if (!pacote || !pacote.id) return reject(new Error('Pacote inválido: falta o ID do processo.'));
+        try {
+            const transaction = db.transaction(["pacientes"], "readwrite");
+            transaction.objectStore("pacientes").put(pacote);
+            transaction.oncomplete = function() { resolve(); };
+            transaction.onerror = function() { reject(new Error('Erro ao guardar na base de dados local.')); };
+        } catch (err) { reject(err); }
+    });
+}
+
 function exportarBackupJSON() {
     const idPac = document.getElementById('paciente-id').value || "Backup";
     let jsonString = JSON.stringify({ nome: document.getElementById('paciente-nome').value, id: idPac, nascimento: document.getElementById('paciente-nascimento').value, indicacoes: document.getElementById('indicacoes-gerais').value, obs: document.getElementById('anomalias-obs').value, appState: appState });
