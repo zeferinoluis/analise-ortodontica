@@ -2,6 +2,18 @@
 // EXPORTAÇÃO PDF — geração do dossiê clínico completo (html2pdf/html2canvas)
 // ==========================================================================
 
+// Clona a tabela do histórico e remove a última coluna (Ações — Editar/Apagar), que só faz
+// sentido no ecrã; o PDF nunca deve mostrar botões interativos.
+function obterHtmlHistoricoParaPDF() {
+    const original = document.getElementById('table-evolution');
+    const clone = original.cloneNode(true);
+    clone.querySelectorAll('tr').forEach(tr => {
+        const ultima = tr.lastElementChild;
+        if (ultima) ultima.remove();
+    });
+    return clone.outerHTML;
+}
+
 function renderizarTabelaResultadosPDF(linhas) {
     if (!linhas || linhas.length === 0) {
         return `<tr><td colspan="4" style="padding:6px; border:1px solid #cbd5e1; text-align:center;">Análise não executada (pontos insuficientes).</td></tr>`;
@@ -194,7 +206,7 @@ async function exportarDossierClinicoCompletoPDF() {
             
             <div style="margin-top:25px;">
                 <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${++secNum}. Historial de Consultas & Evolução Temporal</h3>
-                ${document.getElementById('table-evolution').outerHTML}
+                ${obterHtmlHistoricoParaPDF()}
             </div>
         </div>
     `;

@@ -119,5 +119,49 @@ function salvarAnaliseAtual() {
 
 function renderHistorico() {
     const tbody = document.getElementById('evolution-tbody'); tbody.innerHTML = '';
-    appState.historicoConsultas.forEach(h => { tbody.innerHTML += `<tr><td><strong>${escaparHTML(h.data)}</strong></td><td>${escaparHTML(h.tipo)}</td><td>${escaparHTML(h.resumo)}</td><td>${escaparHTML(h.obs) || 'Sem observações registadas.'}</td></tr>`; });
+    appState.historicoConsultas.forEach((h, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><strong>${escaparHTML(h.data)}</strong></td><td>${escaparHTML(h.tipo)}</td><td>${escaparHTML(h.resumo)}</td><td>${escaparHTML(h.obs) || 'Sem observações registadas.'}</td>`;
+        const tdAcoes = document.createElement('td');
+        tdAcoes.style.whiteSpace = 'nowrap';
+        const btnEditar = document.createElement('button');
+        btnEditar.className = 'action-btn';
+        btnEditar.style.cssText = 'width:auto; margin:0 4px 0 0; padding:0.35rem 0.6rem; font-size:0.78rem; display:inline-block;';
+        btnEditar.textContent = 'Editar';
+        btnEditar.onclick = () => editarObservacaoHistorico(idx);
+        const btnApagar = document.createElement('button');
+        btnApagar.className = 'action-btn';
+        btnApagar.style.cssText = 'width:auto; margin:0; padding:0.35rem 0.6rem; font-size:0.78rem; display:inline-block; background:#fee2e2; border-color:var(--red); color:var(--red);';
+        btnApagar.textContent = 'Apagar';
+        btnApagar.onclick = () => apagarEntradaHistorico(idx);
+        tdAcoes.appendChild(btnEditar);
+        tdAcoes.appendChild(btnApagar);
+        tr.appendChild(tdAcoes);
+        tbody.appendChild(tr);
+    });
+}
+
+// Edita apenas o texto de observações de uma entrada já gravada no histórico (não recalcula métricas)
+function editarObservacaoHistorico(idx) {
+    const entrada = appState.historicoConsultas[idx];
+    if (!entrada) return;
+    const novoTexto = prompt('Editar observações clínicas desta entrada:', entrada.obs || '');
+    if (novoTexto === null) return; // cancelado
+    entrada.obs = novoTexto;
+    renderHistorico();
+    avisarGuardarAposEdicaoHistorico();
+}
+
+// Remove uma entrada do histórico de evolução (não afeta os pontos/traçados já colocados no canvas)
+function apagarEntradaHistorico(idx) {
+    const entrada = appState.historicoConsultas[idx];
+    if (!entrada) return;
+    if (!confirm(`Apagar esta entrada do histórico?\n\n${entrada.data} — ${entrada.tipo}\n\nEsta ação não pode ser desfeita depois de guardar a ficha.`)) return;
+    appState.historicoConsultas.splice(idx, 1);
+    renderHistorico();
+    avisarGuardarAposEdicaoHistorico();
+}
+
+function avisarGuardarAposEdicaoHistorico() {
+    alert('Alteração aplicada apenas neste ecrã. Para tornar a alteração permanente, vá a "Ficha & Documentação" e prima "Guardar Ficha Local" (e sincronize com o Drive, se aplicável).');
 }
