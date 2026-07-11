@@ -155,11 +155,33 @@ function atualizarRotuloInterpretacaoSugerida() {
     btn.textContent = `Gerar Interpretação Sugerida (${nomes[appState.tipoEstudo] || ''})`;
 }
 
+let ultimaObservacaoFoiAutoGerada = false;
+
 // Preenche o campo de observações com a interpretação automática, limitada ao módulo clínico ativo
-// (Cefalometria / Facial / Modelos), pedindo confirmação se já houver texto escrito
+// (Cefalometria / Facial / Modelos), pedindo confirmação apenas se houver texto escrito manualmente
 function preencherInterpretacaoAutomatica() {
     const campo = document.getElementById('anomalias-obs');
     if (!campo) return;
-    if (campo.value.trim() && !confirm('O campo de observações já tem texto. Substituir pela interpretação sugerida automaticamente?')) return;
+    if (campo.value.trim() && !ultimaObservacaoFoiAutoGerada && !confirm('O campo de observações já tem texto escrito manualmente. Substituir pela interpretação sugerida automaticamente?')) return;
     campo.value = gerarInterpretacaoAutomatica(appState.tipoEstudo);
+    ultimaObservacaoFoiAutoGerada = true;
 }
+
+// Ao trocar de módulo (Cefalometria/Facial/Modelos), um texto gerado automaticamente para o módulo
+// anterior deixa de ser válido — limpa o campo para evitar guardar por engano a interpretação errada.
+// Texto escrito manualmente pelo clínico nunca é apagado ao trocar de módulo.
+function limparObservacaoAutoGeradaAoTrocarModulo() {
+    const campo = document.getElementById('anomalias-obs');
+    if (!campo) return;
+    if (ultimaObservacaoFoiAutoGerada) {
+        campo.value = '';
+        ultimaObservacaoFoiAutoGerada = false;
+    }
+}
+
+// Se o clínico editar o texto à mão, deixa de ser tratado como "gerado automaticamente"
+// (para já não ser apagado silenciosamente ao trocar de módulo)
+(function() {
+    const campoObs = document.getElementById('anomalias-obs');
+    if (campoObs) campoObs.addEventListener('input', () => { ultimaObservacaoFoiAutoGerada = false; });
+})();

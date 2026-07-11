@@ -13,6 +13,7 @@ function switchTab(tabId) {
 }
 
 function atualizarInterfaceEstudo() {
+    limparObservacaoAutoGeradaAoTrocarModulo();
     appState.tipoEstudo = document.getElementById('tipo-estudo').value;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
