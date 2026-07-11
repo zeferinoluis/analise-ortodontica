@@ -190,6 +190,10 @@
                 <button class="action-btn" onclick="fecharModalRestauroDrive()" style="width:auto; margin:0; padding:0.3rem 0.7rem;">Fechar</button>
             </div>
             <div style="padding:14px 20px 0;">
+                <label style="font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Versão do backup (se a mais recente não tiver a ficha que procura, escolha uma anterior):</label>
+                <select id="gdrive-restore-versao" onchange="mudarVersaoRestauroDrive()" style="width:100%; box-sizing:border-box; padding:0.5rem; border:1px solid var(--border); border-radius:4px; margin-bottom:10px;">
+                    <option value="">Versão atual (mais recente)</option>
+                </select>
                 <input type="text" id="gdrive-restore-filtro" oninput="filtrarListaRestauroDrive()" placeholder="Filtrar por ID ou nome..." style="width:100%; box-sizing:border-box; padding:0.55rem; border:1px solid var(--border); border-radius:4px;">
             </div>
             <div id="gdrive-restore-lista" style="padding:8px 20px 16px; overflow-y:auto;"></div>

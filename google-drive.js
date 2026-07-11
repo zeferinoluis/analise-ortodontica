@@ -133,6 +133,7 @@ async function marcarRevisaoPermanente(fileId, revisionId) {
 // ==========================================================================
 
 let ultimoBackupPacientesDrive = [];
+let ultimoFileIdRestauroDrive = null;
 
 async function deriveKeyGDriveDecrypt(passphrase, saltB64) {
     const enc = new TextEncoder();
@@ -149,6 +150,52 @@ async function decriptarPayloadGDrive(payload, passphrase) {
     return new TextDecoder().decode(plainBuf);
 }
 
+// Lista as revisões marcadas como permanentes (keepForever) — cada sincronização bem-sucedida cria uma.
+// É isto que permite recuperar um estado anterior mesmo depois de uma sincronização ter sobrescrito o atual.
+async function listarRevisoesDrive(fileId) {
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=revisions(id,modifiedTime,keepForever)`, { headers: { Authorization: 'Bearer ' + gdriveAccessToken } });
+    if (!r.ok) throw new Error('Falha ao listar versões (' + r.status + ')');
+    const data = await r.json();
+    let revs = (data.revisions || []).filter(x => x.keepForever);
+    revs.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime));
+    return revs;
+}
+
+function popularSeletorVersoesDrive(revs) {
+    const sel = document.getElementById('gdrive-restore-versao');
+    sel.innerHTML = '<option value="">Versão atual (mais recente)</option>';
+    revs.forEach(rv => {
+        const d = new Date(rv.modifiedTime);
+        const opt = document.createElement('option');
+        opt.value = rv.id;
+        opt.textContent = d.toLocaleDateString('pt-PT') + ' ' + d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+        sel.appendChild(opt);
+    });
+}
+
+// Descarrega e desencripta (se necessário) o conteúdo do ficheiro — versão atual ou uma revisão específica
+async function carregarConteudoDriveERenderizar(fileId, revisionId) {
+    const url = revisionId
+        ? `https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}?alt=media`
+        : `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + gdriveAccessToken } });
+    if (!r.ok) throw new Error('Falha ao transferir esta versão (' + r.status + ')');
+    let texto = await r.text();
+    let payload = JSON.parse(texto);
+
+    if (payload && payload.encrypted === true) {
+        let pass = gdrivePassphraseSessao || document.getElementById('gdrive-passphrase').value;
+        if (!pass) pass = prompt('Este backup está encriptado. Introduza a palavra-passe de encriptação:') || '';
+        if (!pass) return;
+        texto = await decriptarPayloadGDrive(payload, pass);
+        payload = JSON.parse(texto);
+        gdrivePassphraseSessao = pass;
+    }
+
+    if (!payload || !Array.isArray(payload.pacientes)) throw new Error('Backup sem lista de pacientes reconhecível.');
+    mostrarListaRestauroDrive(payload.pacientes);
+}
+
 async function restaurarDoDriveAbrirLista() {
     if (!gdriveAccessToken) { alert('Ligue-se primeiro ao Google Drive.'); return; }
     const statusEl = document.getElementById('gdrive-status');
@@ -156,30 +203,30 @@ async function restaurarDoDriveAbrirLista() {
         statusEl.innerText = 'A procurar backups...';
         const file = await encontrarFicheiroDrive();
         if (!file) { alert('Não foi encontrado nenhum backup nesta conta Google.'); statusEl.innerText = '✓ Ligado'; return; }
+        ultimoFileIdRestauroDrive = file.id;
 
-        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers: { Authorization: 'Bearer ' + gdriveAccessToken } });
-        if (!r.ok) throw new Error('Falha ao transferir o backup (' + r.status + ')');
-        let texto = await r.text();
-        let payload = JSON.parse(texto);
+        const revs = await listarRevisoesDrive(file.id);
+        popularSeletorVersoesDrive(revs);
 
-        if (payload && payload.encrypted === true) {
-            let pass = gdrivePassphraseSessao || document.getElementById('gdrive-passphrase').value;
-            if (!pass) pass = prompt('Este backup está encriptado. Introduza a palavra-passe de encriptação:') || '';
-            if (!pass) { statusEl.innerText = '✓ Ligado'; return; }
-            try {
-                texto = await decriptarPayloadGDrive(payload, pass);
-                payload = JSON.parse(texto);
-            } catch (e) { throw new Error('Palavra-passe incorreta ou backup corrompido.'); }
-            gdrivePassphraseSessao = pass;
-        }
-
-        if (!payload || !Array.isArray(payload.pacientes)) throw new Error('Backup sem lista de pacientes reconhecível.');
-
-        mostrarListaRestauroDrive(payload.pacientes);
+        await carregarConteudoDriveERenderizar(file.id, null);
         statusEl.innerText = '✓ Ligado';
     } catch (err) {
         statusEl.innerText = '✓ Ligado (falhou o restauro)';
         alert('Erro ao restaurar do Google Drive: ' + err.message);
+    }
+}
+
+// Chamado quando o clínico muda o seletor de versão dentro do modal — recarrega a lista de pacientes dessa revisão
+async function mudarVersaoRestauroDrive() {
+    if (!ultimoFileIdRestauroDrive) return;
+    const revisionId = document.getElementById('gdrive-restore-versao').value || null;
+    const corpo = document.getElementById('gdrive-restore-lista');
+    corpo.innerHTML = '<p style="color:#64748b; font-size:0.9rem;">A carregar esta versão...</p>';
+    try {
+        await carregarConteudoDriveERenderizar(ultimoFileIdRestauroDrive, revisionId);
+    } catch (err) {
+        alert('Erro ao carregar esta versão: ' + err.message);
+        corpo.innerHTML = '';
     }
 }
 
@@ -192,7 +239,7 @@ function mostrarListaRestauroDrive(pacientes) {
     corpo.innerHTML = '';
 
     if (!pacientes.length) {
-        corpo.innerHTML = '<p style="color:#64748b; font-size:0.9rem;">Nenhuma ficha encontrada neste backup.</p>';
+        corpo.innerHTML = '<p style="color:#64748b; font-size:0.9rem;">Nenhuma ficha encontrada nesta versão do backup. Experimente escolher uma versão mais antiga acima, se existir.</p>';
     } else {
         pacientes.forEach((pac, idx) => {
             const linha = document.createElement('div');
@@ -267,6 +314,22 @@ async function sincronizarComDriveAgora(silencioso) {
     try {
         document.getElementById('gdrive-status').innerText = 'A sincronizar...';
         const pacientes = await obterTodosPacientes();
+
+        // Salvaguarda crítica: nunca substituir um backup remoto já existente por uma lista vazia.
+        // Isto acontece tipicamente quando a base de dados local foi apagada/limpa neste dispositivo
+        // (ex: "remover dados do site" no browser) mas o Drive já ligado ainda tem fichas guardadas.
+        if (pacientes.length === 0) {
+            if (!gdriveFileId) {
+                const existente = await encontrarFicheiroDrive();
+                if (existente) { gdriveFileId = existente.id; localStorage.setItem('ortoanalytic_gdrive_file_id', gdriveFileId); }
+            }
+            if (gdriveFileId) {
+                document.getElementById('gdrive-status').innerText = '✓ Ligado';
+                if (!silencioso) alert('A base de dados local deste dispositivo está vazia, mas já existe um backup no Google Drive com fichas guardadas. Por segurança, a sincronização foi cancelada para não o apagar.\n\nSe pretende recuperar essas fichas para este dispositivo, use "Restaurar do Google Drive". Se realmente pretende esvaziar o backup remoto, isso tem de ser feito manualmente.');
+                return;
+            }
+        }
+
         const payload = { pacientes, exportadoEm: new Date().toISOString(), origem: 'OrtoAnalytic Pro v7.0' };
         let conteudoTexto = JSON.stringify(payload);
 
