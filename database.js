@@ -75,6 +75,30 @@ function reabrirBD() {
 }
 
 // Estrutura por omissão do appState — usada para fundir backups antigos sem campos novos
+// Limpa o ecrã para começar uma ficha de paciente nova, sem apagar nada da base de dados
+// local nem do Google Drive. Não recarrega a página — apenas repõe os valores por omissão.
+function novaFicha() {
+    if (!confirm("Iniciar uma ficha nova? Os dados não guardados desta ficha atual serão perdidos.")) return;
+
+    // Campos de identificação e texto livre
+    ['paciente-nome', 'paciente-id', 'paciente-nascimento', 'indicacoes-gerais', 'anomalias-obs'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    // Estado da aplicação (traçados, pontos, imagens, histórico, modelos) reposto para os valores por omissão
+    appState = appStatePorOmissao();
+
+    configureModelosInputs(appState.dadosModelosBackup);
+    document.querySelectorAll('.preview').forEach(div => { div.style.backgroundImage = 'none'; });
+
+    reiniciarHistoricoUndo();
+    atualizarInterfaceEstudo();
+
+    document.getElementById('db-status').innerText = "Ficha nova — por guardar";
+    alert("Ficha nova pronta. Preenche os dados e clica em \"Guardar Ficha Local\" quando terminares.");
+}
+
 function gravarPacienteNaBD() {
     if (!db) return alert("Base de dados ainda não está pronta. Aguarde um instante e tente novamente.");
     const idPac = document.getElementById('paciente-id').value;

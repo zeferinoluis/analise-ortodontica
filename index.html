@@ -29,6 +29,7 @@
         <section id="tab-pacientes" class="tab-content active">
             <div class="db-control-panel" style="background: #e0f2fe; padding: 15px; border-radius: 6px; margin-bottom: 20px; display: flex; gap: 12px; align-items: center; border-left: 5px solid #0284c7; flex-wrap: wrap;">
                 <strong>Base de Dados Local (IndexedDB):</strong>
+                <button class="action-btn" onclick="novaFicha()" style="margin:0; width:auto; background:#7c3aed; color:white; border:none;">Nova Ficha</button>
                 <button class="action-btn" onclick="gravarPacienteNaBD()" style="margin:0; width:auto; background:#16a34a; color:white; border:none;">Guardar Ficha Local</button>
                 <button class="action-btn" onclick="carregarPacienteDaBD()" style="margin:0; width:auto; background:#0284c7; color:white; border:none;">Carregar por ID</button>
                 <button class="action-btn" onclick="resetarBaseDeDados()" style="margin:0; width:auto; background:#dc2626; color:white; border:none;">Reset Total (Instalação Limpa)</button>
