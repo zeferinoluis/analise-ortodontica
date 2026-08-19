@@ -145,10 +145,14 @@ function aplicarRegistoPaciente(res) {
 
 // Carrega uma ficha por ID exato, por parte do ID, ou por nome (não sensível a maiúsculas/acentos exatos).
 // Se houver várias correspondências, pede ao utilizador para escolher qual pretende abrir.
+// Carrega uma ficha por ID exato, por parte do ID, ou por nome (completo ou parcial, sem sensibilidade a acentos/maiúsculas).
+// Usa o que estiver preenchido: se houver texto no campo ID usa-o; senão usa o campo Nome Completo.
 function carregarPacienteDaBD() {
     if (!db) return alert("Base de dados ainda não está pronta. Aguarde um instante e tente novamente.");
-    const termo = document.getElementById('paciente-id').value.trim();
-    if (!termo) return alert("Insira o ID (completo ou parcial) ou o nome do paciente.");
+    const valorId = document.getElementById('paciente-id').value.trim();
+    const valorNome = document.getElementById('paciente-nome').value.trim();
+    const termo = valorId || valorNome;
+    if (!termo) return alert("Insira o ID (completo ou parcial) ou o nome do paciente, num dos dois campos.");
     const termoNorm = normalizarTextoPesquisa(termo);
     try {
         // Caminho rápido: ID exato
