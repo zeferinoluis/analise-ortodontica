@@ -117,28 +117,68 @@ function gravarPacienteNaBD() {
     } catch (err) { alert("Erro ao guardar: " + err.message); }
 }
 
+// Aplica ao formulário/estado um registo já lido da BD ({id, nome, nascimento, indicacoes, obs, appStateBackup})
+function aplicarRegistoPaciente(res) {
+    try {
+        document.getElementById('paciente-id').value = res.id;
+        document.getElementById('paciente-nome').value = res.nome;
+        document.getElementById('paciente-nascimento').value = res.nascimento;
+        document.getElementById('indicacoes-gerais').value = res.indicacoes;
+        document.getElementById('anomalias-obs').value = res.obs;
+        appState = normalizarAppState(JSON.parse(res.appStateBackup));
+
+        configureModelosInputs(appState.dadosModelosBackup);
+        document.querySelectorAll('.preview').forEach(div => div.style.backgroundImage = 'none');
+        for (let key in appState.imagensPaciente) {
+            let pBox = document.getElementById(`prev-${key}`); if (pBox) pBox.style.backgroundImage = `url(${appState.imagensPaciente[key]})`;
+        }
+        reiniciarHistoricoUndo();
+        atualizarInterfaceEstudo(); alert("Dados restaurados!");
+    } catch (err) { alert("Registo encontrado mas corrompido: " + err.message); }
+}
+
+// Carrega uma ficha por ID exato, por parte do ID, ou por nome (não sensível a maiúsculas/acentos exatos).
+// Se houver várias correspondências, pede ao utilizador para escolher qual pretende abrir.
 function carregarPacienteDaBD() {
     if (!db) return alert("Base de dados ainda não está pronta. Aguarde um instante e tente novamente.");
-    const idPac = document.getElementById('paciente-id').value;
-    if (!idPac) return alert("Insira o ID do processo.");
+    const termo = document.getElementById('paciente-id').value.trim();
+    if (!termo) return alert("Insira o ID (completo ou parcial) ou o nome do paciente.");
+    const termoNorm = termo.toLowerCase();
     try {
-        const req = db.transaction(["pacientes"], "readonly").objectStore("pacientes").get(idPac);
-        req.onsuccess = function(e) {
-            let res = e.target.result; if (!res) return alert("Registo ausente.");
-            try {
-                document.getElementById('paciente-nome').value = res.nome; document.getElementById('paciente-nascimento').value = res.nascimento; document.getElementById('indicacoes-gerais').value = res.indicacoes; document.getElementById('anomalias-obs').value = res.obs;
-                appState = normalizarAppState(JSON.parse(res.appStateBackup));
+        // Caminho rápido: ID exato
+        const reqExato = db.transaction(["pacientes"], "readonly").objectStore("pacientes").get(termo);
+        reqExato.onsuccess = function(e) {
+            if (e.target.result) return aplicarRegistoPaciente(e.target.result);
 
-                configureModelosInputs(appState.dadosModelosBackup);
-                document.querySelectorAll('.preview').forEach(div => div.style.backgroundImage = 'none');
-                for (let key in appState.imagensPaciente) {
-                    let pBox = document.getElementById(`prev-${key}`); if (pBox) pBox.style.backgroundImage = `url(${appState.imagensPaciente[key]})`;
+            // Sem correspondência exata: percorre todos os registos e procura por ID parcial ou nome
+            const encontrados = [];
+            const cursorReq = db.transaction(["pacientes"], "readonly").objectStore("pacientes").openCursor();
+            cursorReq.onsuccess = function(ev) {
+                const cursor = ev.target.result;
+                if (cursor) {
+                    const reg = cursor.value;
+                    const idMatch = (reg.id || '').toLowerCase().includes(termoNorm);
+                    const nomeMatch = (reg.nome || '').toLowerCase().includes(termoNorm);
+                    if (idMatch || nomeMatch) encontrados.push(reg);
+                    cursor.continue();
+                } else {
+                    if (encontrados.length === 0) {
+                        alert("Nenhum paciente encontrado para \"" + termo + "\".");
+                    } else if (encontrados.length === 1) {
+                        aplicarRegistoPaciente(encontrados[0]);
+                    } else {
+                        const lista = encontrados.map((r, i) => `${i + 1}. ${r.nome || '(sem nome)'} — ID: ${r.id}`).join('\n');
+                        const escolha = prompt(`${encontrados.length} pacientes correspondem a "${termo}":\n\n${lista}\n\nIndique o número do paciente a abrir:`);
+                        if (escolha === null) return;
+                        const idx = parseInt(escolha, 10) - 1;
+                        if (isNaN(idx) || idx < 0 || idx >= encontrados.length) return alert("Número inválido.");
+                        aplicarRegistoPaciente(encontrados[idx]);
+                    }
                 }
-                reiniciarHistoricoUndo();
-                atualizarInterfaceEstudo(); alert("Dados restaurados!");
-            } catch (err) { alert("Registo encontrado mas corrompido: " + err.message); }
+            };
+            cursorReq.onerror = function() { alert("Erro ao consultar a base de dados local."); };
         };
-        req.onerror = function() { alert("Erro ao consultar a base de dados local."); };
+        reqExato.onerror = function() { alert("Erro ao consultar a base de dados local."); };
     } catch (err) { alert("Erro ao carregar: " + err.message); }
 }
 
