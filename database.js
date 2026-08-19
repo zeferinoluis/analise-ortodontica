@@ -117,6 +117,12 @@ function gravarPacienteNaBD() {
     } catch (err) { alert("Erro ao guardar: " + err.message); }
 }
 
+// Remove acentos e normaliza para minúsculas, para comparações de pesquisa tolerantes
+// a "joao" vs "João", "ines" vs "Inês", etc.
+function normalizarTextoPesquisa(str) {
+    return (str || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 // Aplica ao formulário/estado um registo já lido da BD ({id, nome, nascimento, indicacoes, obs, appStateBackup})
 function aplicarRegistoPaciente(res) {
     try {
@@ -143,22 +149,22 @@ function carregarPacienteDaBD() {
     if (!db) return alert("Base de dados ainda não está pronta. Aguarde um instante e tente novamente.");
     const termo = document.getElementById('paciente-id').value.trim();
     if (!termo) return alert("Insira o ID (completo ou parcial) ou o nome do paciente.");
-    const termoNorm = termo.toLowerCase();
+    const termoNorm = normalizarTextoPesquisa(termo);
     try {
         // Caminho rápido: ID exato
         const reqExato = db.transaction(["pacientes"], "readonly").objectStore("pacientes").get(termo);
         reqExato.onsuccess = function(e) {
             if (e.target.result) return aplicarRegistoPaciente(e.target.result);
 
-            // Sem correspondência exata: percorre todos os registos e procura por ID parcial ou nome
+            // Sem correspondência exata: percorre todos os registos e procura por ID parcial ou nome (parcial, sem acentos)
             const encontrados = [];
             const cursorReq = db.transaction(["pacientes"], "readonly").objectStore("pacientes").openCursor();
             cursorReq.onsuccess = function(ev) {
                 const cursor = ev.target.result;
                 if (cursor) {
                     const reg = cursor.value;
-                    const idMatch = (reg.id || '').toLowerCase().includes(termoNorm);
-                    const nomeMatch = (reg.nome || '').toLowerCase().includes(termoNorm);
+                    const idMatch = normalizarTextoPesquisa(reg.id).includes(termoNorm);
+                    const nomeMatch = normalizarTextoPesquisa(reg.nome).includes(termoNorm);
                     if (idMatch || nomeMatch) encontrados.push(reg);
                     cursor.continue();
                 } else {
