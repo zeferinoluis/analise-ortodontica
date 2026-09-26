@@ -97,7 +97,20 @@
                     </select>
 
                     <div class="form-group" style="margin-bottom: 12px;"><label>Data do Exame:</label><input type="date" id="data-exame"></div>
-                    <div id="file-uploader-area"><input type="file" id="file-input" accept="image/*" style="margin-bottom: 15px; width: 100%;"></div>
+
+                    <div class="form-group" id="grupo-subvista-facial" style="display:none; margin-bottom: 12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:10px;">
+                        <label style="color:#0369a1; font-weight:bold;">Vista a analisar:</label>
+                        <div style="display:flex; gap:8px; margin-top:6px;">
+                            <button type="button" class="action-btn" id="btn-facial-frente" onclick="escolherSubVistaFacial('frente')" style="margin:0; flex:1;">Foto de Frente</button>
+                            <button type="button" class="action-btn" id="btn-facial-perfil" onclick="escolherSubVistaFacial('perfil')" style="margin:0; flex:1;">Foto de Perfil</button>
+                        </div>
+                        <p style="font-size:0.72rem; color:#475569; margin:8px 0 0;">Cada vista tem a sua própria fotografia, calibração, marcos e relatório. O dossiê em PDF inclui as duas análises.</p>
+                    </div>
+
+                    <div id="file-uploader-area">
+                        <label id="rotulo-upload-imagem" for="file-input" style="display:none; font-size:0.8rem; font-weight:bold; color:#0369a1; margin-bottom:4px;"></label>
+                        <input type="file" id="file-input" accept="image/*" style="margin-bottom: 15px; width: 100%;">
+                    </div>
 
                     <div id="painel-grafico-controlos">
                         <button class="action-btn" onclick="startCalibration()">Calibrar Régua (10mm)</button>

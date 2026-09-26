@@ -12,6 +12,63 @@ function switchTab(tabId) {
     if (tabId === 'historico') renderHistorico();
 }
 
+// Carrega no canvas e nos resultados o estudo correspondente ao módulo ativo
+// (cefalometria / facialFrente / facialPerfil), repondo a imagem e a escala de cada um.
+function carregarEstudoAtivoNoCanvas() {
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
+    if (!cEstudo) return;
+    if (cEstudo.src) {
+        img.src = cEstudo.src;
+        img.onload = function() {
+            img.style.display = 'block';
+            img.style.width = (img.naturalWidth * cEstudo.escalaVisual) + 'px';
+            img.style.height = (img.naturalHeight * cEstudo.escalaVisual) + 'px';
+            canvas.width = img.naturalWidth * cEstudo.escalaVisual;
+            canvas.height = img.naturalHeight * cEstudo.escalaVisual;
+            redrawCanvas();
+        };
+    } else {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+        canvas.width = Math.max(1, canvas.width);
+        canvas.height = Math.max(1, canvas.height);
+        if (appState.tipoEstudo === 'facial') calcularAnaliseFacial();
+        else atualizarResultadosGraficosLimpos();
+    }
+}
+
+// Alterna entre a análise da foto de frente e a do perfil, dentro do módulo Fotométrica Facial
+function escolherSubVistaFacial(vista) {
+    appState.subVistaFacial = (vista === 'perfil') ? 'perfil' : 'frente';
+    appState.selectedPointName = null;
+    appState.isCalibrating = false;
+    atualizarInterfaceEstudo();
+}
+
+function atualizarBotoesSubVistaFacial() {
+    const ativa = appState.subVistaFacial === 'perfil' ? 'perfil' : 'frente';
+    const bFrente = document.getElementById('btn-facial-frente');
+    const bPerfil = document.getElementById('btn-facial-perfil');
+    const rotulo = document.getElementById('rotulo-upload-imagem');
+    if (bFrente) {
+        const on = ativa === 'frente';
+        bFrente.style.background = on ? '#0284c7' : 'white';
+        bFrente.style.color = on ? 'white' : '#0369a1';
+        bFrente.style.borderColor = '#0284c7';
+    }
+    if (bPerfil) {
+        const on = ativa === 'perfil';
+        bPerfil.style.background = on ? '#7c3aed' : 'white';
+        bPerfil.style.color = on ? 'white' : '#6d28d9';
+        bPerfil.style.borderColor = '#7c3aed';
+    }
+    if (rotulo) {
+        rotulo.textContent = ativa === 'perfil'
+            ? 'A carregar fotografia: PERFIL — carregue a foto de perfil do paciente'
+            : 'A carregar fotografia: FRENTE — carregue a foto de frente do paciente';
+    }
+}
+
 function atualizarInterfaceEstudo() {
     limparObservacaoAutoGeradaAoTrocarModulo();
     appState.tipoEstudo = document.getElementById('tipo-estudo').value;
@@ -22,6 +79,8 @@ function atualizarInterfaceEstudo() {
     const viewportGrafico = document.getElementById('viewport-grafico');
     const btnSalvarGrafico = document.getElementById('btn-salvar-grafico');
     const tabelaHeader = document.getElementById('table-header-dinamico');
+    const grupoSubVista = document.getElementById('grupo-subvista-facial');
+    const rotuloUpload = document.getElementById('rotulo-upload-imagem');
 
     atualizarBotoesUndoRedo();
     atualizarRotuloInterpretacaoSugerida();
@@ -29,31 +88,28 @@ function atualizarInterfaceEstudo() {
     if (appState.tipoEstudo === 'modelos') {
         pGrafico.style.display = 'none'; btnSalvarGrafico.style.display = 'none';
         viewportGrafico.style.display = 'none'; pModelos.style.display = 'block';
+        if (grupoSubVista) grupoSubVista.style.display = 'none';
+        if (rotuloUpload) rotuloUpload.style.display = 'none';
         tabelaHeader.innerHTML = '<tr><th>Análise de Modelo</th><th>Medido</th><th>Norma</th><th>Status</th></tr>';
         executarCalculosModelosPuros();
     } else {
         pGrafico.style.display = 'block'; btnSalvarGrafico.style.display = 'block';
         viewportGrafico.style.display = 'flex'; pModelos.style.display = 'none';
         tabelaHeader.innerHTML = '<tr><th>Parâmetro</th><th>Medido</th><th>Norma</th><th>Status</th></tr>';
-        
+
+        // Controlos exclusivos da fotometria facial (frente vs. perfil)
+        const modoFacial = appState.tipoEstudo === 'facial';
+        if (grupoSubVista) grupoSubVista.style.display = modoFacial ? 'block' : 'none';
+        if (rotuloUpload) rotuloUpload.style.display = modoFacial ? 'block' : 'none';
+        if (modoFacial) atualizarBotoesSubVistaFacial();
+
         renderizarListaPontosDinamica();
         restaurarDescricaoPontoAtivo();
 
         const grupoAnalise = document.getElementById('grupo-tipo-analise-cefalo');
         if (grupoAnalise) grupoAnalise.style.display = (appState.tipoEstudo === 'cefalometria') ? 'block' : 'none';
 
-        let cEstudo = appState.estudosImagens[appState.tipoEstudo];
-        if (cEstudo.src) {
-            img.src = cEstudo.src;
-            img.onload = function() {
-                img.style.display = 'block';
-                img.style.width = (img.naturalWidth * cEstudo.escalaVisual) + 'px';
-                img.style.height = (img.naturalHeight * cEstudo.escalaVisual) + 'px';
-                canvas.width = img.naturalWidth * cEstudo.escalaVisual;
-                canvas.height = img.naturalHeight * cEstudo.escalaVisual;
-                redrawCanvas();
-            }
-        } else { img.style.display = 'none'; atualizarResultadosGraficosLimpos(); }
+        carregarEstudoAtivoNoCanvas();
     }
 }
 
@@ -82,9 +138,11 @@ function previewMedia(inputId) {
 }
 
 fileInput.addEventListener('change', function(e) {
+    if (!e.target.files || !e.target.files[0]) return;
+    const chave = chaveEstudoAtual();
     const reader = new FileReader();
     reader.onload = function(event) {
-        let cEstudo = appState.estudosImagens[appState.tipoEstudo];
+        let cEstudo = appState.estudosImagens[chave];
         cEstudo.src = event.target.result; img.src = event.target.result;
         img.onload = function() {
             img.style.display = 'block';
@@ -99,6 +157,8 @@ fileInput.addEventListener('change', function(e) {
         }
     }
     reader.readAsDataURL(e.target.files[0]);
+    // Permite voltar a carregar a mesma fotografia mais tarde (o value fica limpo após a leitura)
+    e.target.value = '';
 });
 
 function atualizarResultadosGraficosLimpos() { document.getElementById('results-tbody').innerHTML = `<tr><td colspan="4">Aguardando pontos...</td></tr>`; }
@@ -113,9 +173,30 @@ function salvarAnaliseAtual() {
         let snb = snbVal !== null ? snbVal.toFixed(1) : '-';
         let anb = (snaVal !== null && snbVal !== null) ? (snaVal - snbVal).toFixed(1) : '-';
         resumo = `SNA: ${sna}°, SNB: ${snb}°, ANB: ${anb}°`;
+    } else if (appState.tipoEstudo === 'facial') {
+        // Regista, na mesma entrada, aquilo que está efetivamente medido em cada uma das duas vistas
+        resumo = resumoFacialParaHistorico();
     }
     appState.historicoConsultas.push({ data: document.getElementById('data-exame').value, tipo: appState.tipoEstudo.toUpperCase(), resumo: resumo, obs: document.getElementById('anomalias-obs').value });
     alert('Traçado arquivado!');
+}
+
+// Síntese das duas análises faciais para o histórico de evolução (só inclui o que tem pontos marcados)
+function resumoFacialParaHistorico() {
+    const rel = calcularRelatorioFacialCompleto();
+    const partes = [];
+    if (rel.frente.length) {
+        const terços = rel.frente.filter(l => l.label.indexOf('Terço ') === 0).map(l => l.valor).join(' / ');
+        partes.push(`Frente: ${terços ? 'terços ' + terços : rel.frente.length + ' parâmetro(s)'}`);
+    }
+    if (rel.perfil.length) {
+        const nl = rel.perfil.find(l => l.label.indexOf('Nasolabial') === 0);
+        const cx = rel.perfil.find(l => l.label.indexOf('Convexidade Facial') === 0);
+        const det = [nl ? `nasolabial ${nl.valor}` : null, cx ? `convexidade ${cx.valor}` : null].filter(Boolean).join(', ');
+        partes.push(`Perfil: ${det || rel.perfil.length + ' parâmetro(s)'}`);
+    }
+    if (!partes.length) return 'Sem marcos faciais suficientes para cálculo.';
+    return partes.join(' | ');
 }
 
 function renderHistorico() {

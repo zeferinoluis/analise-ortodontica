@@ -1,34 +1,37 @@
 // ==========================================================================
-// UNDO/REDO — histórico de estados do traçado, por tipo de estudo
-// (cefalometria / facial). Atalhos: Ctrl+Z / Ctrl+Y.
+// UNDO/REDO — histórico de estados do traçado, por estudo ativo
+// (cefalometria / facialFrente / facialPerfil). Atalhos: Ctrl+Z / Ctrl+Y.
 // ==========================================================================
 
-let historicoEstados = { cefalometria: [], facial: [] };
-let estadosRefazer = { cefalometria: [], facial: [] };
+// Cada vista da fotometria facial tem a sua própria pilha de undo — trocar de
+// vista não mistura nem apaga o histórico da outra.
+let historicoEstados = { cefalometria: [], facialFrente: [], facialPerfil: [] };
+let estadosRefazer = { cefalometria: [], facialFrente: [], facialPerfil: [] };
 const LIMITE_HISTORICO_UNDO = 40;
 
 function snapshotEstudoAtual() {
-    const cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     return { pontos: JSON.parse(JSON.stringify(cEstudo.pontos)), scalePxPerMm: cEstudo.scalePxPerMm };
 }
 
 function guardarEstadoParaUndo() {
-    if (appState.tipoEstudo === 'modelos') return;
-    const pilha = historicoEstados[appState.tipoEstudo];
+    const chave = chaveEstudoAtual();
+    if (chave === 'modelos') return;
+    const pilha = historicoEstados[chave];
     pilha.push(snapshotEstudoAtual());
     if (pilha.length > LIMITE_HISTORICO_UNDO) pilha.shift();
-    estadosRefazer[appState.tipoEstudo] = [];
+    estadosRefazer[chave] = [];
     atualizarBotoesUndoRedo();
 }
 
 function reiniciarHistoricoUndo() {
-    historicoEstados = { cefalometria: [], facial: [] };
-    estadosRefazer = { cefalometria: [], facial: [] };
+    historicoEstados = { cefalometria: [], facialFrente: [], facialPerfil: [] };
+    estadosRefazer = { cefalometria: [], facialFrente: [], facialPerfil: [] };
     atualizarBotoesUndoRedo();
 }
 
 function aplicarSnapshot(snap) {
-    const cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     cEstudo.pontos = snap.pontos;
     cEstudo.scalePxPerMm = snap.scalePxPerMm;
     redrawCanvas();
@@ -37,19 +40,21 @@ function aplicarSnapshot(snap) {
 }
 
 function desfazer() {
-    if (appState.tipoEstudo === 'modelos') return;
-    const pilha = historicoEstados[appState.tipoEstudo];
+    const chave = chaveEstudoAtual();
+    if (chave === 'modelos') return;
+    const pilha = historicoEstados[chave];
     if (!pilha.length) return;
-    estadosRefazer[appState.tipoEstudo].push(snapshotEstudoAtual());
+    estadosRefazer[chave].push(snapshotEstudoAtual());
     aplicarSnapshot(pilha.pop());
     atualizarBotoesUndoRedo();
 }
 
 function refazer() {
-    if (appState.tipoEstudo === 'modelos') return;
-    const pilha = estadosRefazer[appState.tipoEstudo];
+    const chave = chaveEstudoAtual();
+    if (chave === 'modelos') return;
+    const pilha = estadosRefazer[chave];
     if (!pilha.length) return;
-    historicoEstados[appState.tipoEstudo].push(snapshotEstudoAtual());
+    historicoEstados[chave].push(snapshotEstudoAtual());
     aplicarSnapshot(pilha.pop());
     atualizarBotoesUndoRedo();
 }
@@ -57,9 +62,10 @@ function refazer() {
 function atualizarBotoesUndoRedo() {
     const bUndo = document.getElementById('btn-desfazer');
     const bRedo = document.getElementById('btn-refazer');
-    const semHistorico = appState.tipoEstudo === 'modelos';
-    if (bUndo) bUndo.disabled = semHistorico || historicoEstados[appState.tipoEstudo].length === 0;
-    if (bRedo) bRedo.disabled = semHistorico || estadosRefazer[appState.tipoEstudo].length === 0;
+    const chave = chaveEstudoAtual();
+    const semHistorico = chave === 'modelos' || !historicoEstados[chave] || !estadosRefazer[chave];
+    if (bUndo) bUndo.disabled = semHistorico || historicoEstados[chave].length === 0;
+    if (bRedo) bRedo.disabled = semHistorico || estadosRefazer[chave].length === 0;
 }
 
 document.addEventListener('keydown', function(e) {

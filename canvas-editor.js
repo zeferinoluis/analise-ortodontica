@@ -6,7 +6,7 @@
 function mostrarDescricaoPonto(id) {
     const el = document.getElementById('descricao-ponto-ativo');
     if (!el) return;
-    const cfg = (configuracaoPontos[appState.tipoEstudo] || []).find(p => p.id === id);
+    const cfg = (configuracaoPontos[chaveEstudoAtual()] || []).find(p => p.id === id);
     if (!cfg) { el.innerHTML = 'Selecione ou passe o rato sobre um marco para ver a descrição.'; return; }
     el.innerHTML = `<strong>${cfg.nome}</strong><br>${cfg.desc || 'Sem descrição disponível.'}`;
 }
@@ -18,11 +18,11 @@ function restaurarDescricaoPontoAtivo() {
 
 function renderizarListaPontosDinamica() {
     if (appState.tipoEstudo === 'modelos') return;
-    const cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     const lista = document.getElementById('lista-pontos-dinamica');
     if (!lista) return;
     lista.innerHTML = '';
-    configuracaoPontos[appState.tipoEstudo].forEach(p => {
+    (configuracaoPontos[chaveEstudoAtual()] || []).forEach(p => {
         const colocado = !!(cEstudo && cEstudo.pontos[p.id]);
         const linha = document.createElement('div');
         linha.className = 'ponto-linha';
@@ -47,7 +47,7 @@ function renderizarListaPontosDinamica() {
 }
 
 function apagarPonto(id) {
-    const cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     if (!cEstudo || !cEstudo.pontos[id]) return;
     guardarEstadoParaUndo();
     cEstudo.pontos[id] = null;
@@ -65,7 +65,7 @@ function selectPoint(pName) {
 }
 
 function startCalibration() {
-    let cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    let cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     if (!cEstudo || !cEstudo.src) { alert('Carregue primeiro uma imagem antes de calibrar a régua.'); return; }
     appState.isCalibrating = true; appState.calibrationPoints = [];
     alert('Calibração: marque 2 pontos com 10mm reais de distância entre si.');
@@ -101,7 +101,7 @@ canvas.addEventListener('click', function(e) {
     // Esta flag é ligada no pointerdown assim que se agarra um ponto existente, para o clique seguinte ser ignorado.
     if (ignorarProximoClique) { ignorarProximoClique = false; return; }
     const { x, y } = coordenadasCanvas(e);
-    let cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    let cEstudo = appState.estudosImagens[chaveEstudoAtual()];
 
     if (appState.isCalibrating) {
         appState.calibrationPoints.push({x, y});
@@ -140,7 +140,7 @@ canvas.addEventListener('click', function(e) {
 canvas.addEventListener('pointerdown', function(e) {
     if (appState.isCalibrating || appState.selectedPointName) return;
     const { x, y } = coordenadasCanvas(e);
-    const cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     if (!cEstudo) return;
     const idProximo = encontrarPontoProximo(x, y, cEstudo);
     if (!idProximo) return;
@@ -153,7 +153,7 @@ canvas.addEventListener('pointerdown', function(e) {
 
 canvas.addEventListener('pointermove', function(e) {
     const { x, y } = coordenadasCanvas(e);
-    const cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    const cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     if (!cEstudo) return;
 
     if (arrastandoPonto) {
@@ -168,7 +168,7 @@ canvas.addEventListener('pointermove', function(e) {
     if (!tooltip || e.pointerType !== 'mouse' || appState.isCalibrating) return;
     const idProximo = encontrarPontoProximo(x, y, cEstudo);
     if (idProximo) {
-        const cfg = (configuracaoPontos[appState.tipoEstudo] || []).find(p => p.id === idProximo);
+        const cfg = (configuracaoPontos[chaveEstudoAtual()] || []).find(p => p.id === idProximo);
         tooltip.innerHTML = cfg ? `<strong>${cfg.nome}</strong><br>${cfg.desc || ''}` : '';
         tooltip.style.left = (x + 14) + 'px';
         tooltip.style.top = (y - 12) + 'px';
@@ -184,7 +184,7 @@ canvas.addEventListener('pointerup', function(e) {
     if (!arrastandoPonto) return;
     if (!pontoArrastadoMoveu) {
         // não houve movimento real — remove o snapshot de undo desnecessário
-        const pilha = historicoEstados[appState.tipoEstudo];
+        const pilha = historicoEstados[chaveEstudoAtual()];
         if (pilha.length) pilha.pop();
         atualizarBotoesUndoRedo();
     } else {
@@ -202,7 +202,7 @@ canvas.addEventListener('pointerleave', function() {
 function drawLine(p1, p2, color, targetCtx = ctx) { targetCtx.beginPath(); targetCtx.moveTo(p1.x, p1.y); targetCtx.lineTo(p2.x, p2.y); targetCtx.strokeStyle = color; targetCtx.lineWidth = 4; targetCtx.stroke(); }
 function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let cEstudo = appState.estudosImagens[appState.tipoEstudo];
+    let cEstudo = appState.estudosImagens[chaveEstudoAtual()];
     
     for (let p in cEstudo.pontos) {
         if (cEstudo.pontos[p]) {
@@ -214,9 +214,9 @@ function redrawCanvas() {
             ctx.fillText(p, vx + 8, vy - 5);
         }
     }
+    const v = (k) => cEstudo.pontos[k] ? { x: cEstudo.pontos[k].x*cEstudo.escalaVisual, y: cEstudo.pontos[k].y*cEstudo.escalaVisual } : null;
     if (appState.tipoEstudo === 'cefalometria') {
         let pts = cEstudo.pontos;
-        const v = (k) => pts[k] ? { x: pts[k].x*cEstudo.escalaVisual, y: pts[k].y*cEstudo.escalaVisual } : null;
         if(pts.S && pts.N) drawLine(v('S'), v('N'), '#0284c7');
         if(pts.N && pts.A) drawLine(v('N'), v('A'), '#16a34a');
         if(pts.N && pts.B) drawLine(v('N'), v('B'), '#e11d48');
@@ -225,7 +225,35 @@ function redrawCanvas() {
         if(pts.U1a && pts.U1i) drawLine(v('U1a'), v('U1i'), '#0891b2');
         if(pts.L1a && pts.L1i) drawLine(v('L1a'), v('L1i'), '#0891b2');
         calcularCefalometriaAvancada();
-    } else if (appState.tipoEstudo === 'facial') { calcularAnaliseFacial(); }
+    } else if (appState.tipoEstudo === 'facial') {
+        const pts = cEstudo.pontos;
+        if (chaveEstudoAtual() === 'facialFrente') {
+            // Linha média vertical e proporções horizontais da vista de frente
+            if (pts.Tr && pts.Gl) drawLine(v('Tr'), v('Gl'), '#0284c7');
+            if (pts.Gl && pts.Sn) drawLine(v('Gl'), v('Sn'), '#0284c7');
+            if (pts.Sn && pts.Me) drawLine(v('Sn'), v('Me'), '#0284c7');
+            if (pts.P_D && pts.P_E) drawLine(v('P_D'), v('P_E'), '#7c3aed');
+            if (pts.En_D && pts.En_E) drawLine(v('En_D'), v('En_E'), '#94a3b8');
+            if (pts.Zy_D && pts.Zy_E) drawLine(v('Zy_D'), v('Zy_E'), '#ea580c');
+            if (pts.Ch_D && pts.Ch_E) drawLine(v('Ch_D'), v('Ch_E'), '#e11d48');
+            if (pts.Al_D && pts.Al_E) drawLine(v('Al_D'), v('Al_E'), '#16a34a');
+        } else {
+            // Sequência do perfil mole e linha Gl–Pg'
+            if (pts.Tr && pts.Gl) drawLine(v('Tr'), v('Gl'), '#0284c7');
+            if (pts.Gl && pts.Na) drawLine(v('Gl'), v('Na'), '#0284c7');
+            if (pts.Na && pts.Prn) drawLine(v('Na'), v('Prn'), '#0284c7');
+            if (pts.Prn && pts.Cm) drawLine(v('Prn'), v('Cm'), '#16a34a');
+            if (pts.Cm && pts.Sn) drawLine(v('Cm'), v('Sn'), '#16a34a');
+            if (pts.Sn && pts.Ls) drawLine(v('Sn'), v('Ls'), '#e11d48');
+            if (pts.Ls && pts.Li) drawLine(v('Ls'), v('Li'), '#e11d48');
+            if (pts.Li && pts.Bs) drawLine(v('Li'), v('Bs'), '#e11d48');
+            if (pts.Bs && pts.PgL) drawLine(v('Bs'), v('PgL'), '#e11d48');
+            if (pts.PgL && pts.Me) drawLine(v('PgL'), v('Me'), '#e11d48');
+            if (pts.Me && pts.C) drawLine(v('Me'), v('C'), '#94a3b8');
+            if (pts.Gl && pts.PgL) drawLine(v('Gl'), v('PgL'), '#7c3aed');
+        }
+        calcularAnaliseFacial();
+    }
 }
 
 // Constrói uma linha de resultado padronizada {grupo, label, valor, norma, status, texto}

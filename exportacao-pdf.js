@@ -30,6 +30,30 @@ function renderizarTabelaResultadosPDF(linhas) {
     return html;
 }
 
+// Desenha no contexto virtual as linhas do estudo pedido (cefalometria / facialFrente / facialPerfil)
+function desenharLinhasEstudoNoCtx(cEstudo, chaveEstudo, vCtx) {
+    const p = cEstudo.pontos;
+    const lin = (a, b, cor) => { if (p[a] && p[b]) drawLine({ x: p[a].x, y: p[a].y }, { x: p[b].x, y: p[b].y }, cor, vCtx); };
+
+    if (chaveEstudo === 'cefalometria') {
+        lin('S', 'N', '#0284c7'); lin('N', 'A', '#16a34a'); lin('N', 'B', '#e11d48');
+        lin('Go', 'Gn', '#ea580c'); lin('Or', 'Po', '#7c3aed');
+        lin('U1a', 'U1i', '#0891b2'); lin('L1a', 'L1i', '#0891b2');
+    } else if (chaveEstudo === 'facialFrente') {
+        // Linha média vertical e planos horizontais (proporções e simetria)
+        lin('Tr', 'Gl', '#0284c7'); lin('Gl', 'Sn', '#0284c7'); lin('Sn', 'Me', '#0284c7');
+        lin('P_D', 'P_E', '#7c3aed'); lin('En_D', 'En_E', '#94a3b8');
+        lin('Zy_D', 'Zy_E', '#ea580c'); lin('Ch_D', 'Ch_E', '#e11d48'); lin('Al_D', 'Al_E', '#16a34a');
+    } else if (chaveEstudo === 'facialPerfil') {
+        // Perfil mole e linha de referência Gl–Pg'
+        lin('Tr', 'Gl', '#0284c7'); lin('Gl', 'Na', '#0284c7'); lin('Na', 'Prn', '#0284c7');
+        lin('Prn', 'Cm', '#16a34a'); lin('Cm', 'Sn', '#16a34a');
+        lin('Sn', 'Ls', '#e11d48'); lin('Ls', 'Li', '#e11d48'); lin('Li', 'Bs', '#e11d48');
+        lin('Bs', 'PgL', '#e11d48'); lin('PgL', 'Me', '#e11d48');
+        lin('Me', 'C', '#94a3b8'); lin('Gl', 'PgL', '#7c3aed');
+    }
+}
+
 // GERAÇÃO ASSÍNCRONA DO CANVAS VIRTUAL (aguarda o carregamento da imagem antes de desenhar)
 function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
     return new Promise((resolve) => {
@@ -49,21 +73,7 @@ function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
             vCtx.lineWidth = Math.max(4, nw / 240);
             let p = dados.pontos;
 
-            if (chaveEstudo === 'cefalometria') {
-                if(p.S && p.N) drawLine({x:p.S.x,y:p.S.y},{x:p.N.x,y:p.N.y},'#0284c7',vCtx);
-                if(p.N && p.A) drawLine({x:p.N.x,y:p.N.y},{x:p.A.x,y:p.A.y},'#16a34a',vCtx);
-                if(p.N && p.B) drawLine({x:p.N.x,y:p.N.y},{x:p.B.x,y:p.B.y},'#e11d48',vCtx);
-                if(p.Go && p.Gn) drawLine({x:p.Go.x,y:p.Go.y},{x:p.Gn.x,y:p.Gn.y},'#ea580c',vCtx);
-                if(p.Or && p.Po) drawLine({x:p.Or.x,y:p.Or.y},{x:p.Po.x,y:p.Po.y},'#7c3aed',vCtx);
-                if(p.U1a && p.U1i) drawLine({x:p.U1a.x,y:p.U1a.y},{x:p.U1i.x,y:p.U1i.y},'#0891b2',vCtx);
-                if(p.L1a && p.L1i) drawLine({x:p.L1a.x,y:p.L1a.y},{x:p.L1i.x,y:p.L1i.y},'#0891b2',vCtx);
-            } else if (chaveEstudo === 'facial') {
-                if(p.Tr && p.Na) drawLine({x:p.Tr.x,y:p.Tr.y},{x:p.Na.x,y:p.Na.y},'#0284c7',vCtx);
-                if(p.Na && p.Sn) drawLine({x:p.Na.x,y:p.Na.y},{x:p.Sn.x,y:p.Sn.y},'#16a34a',vCtx);
-                if(p.Sn && p.Me) drawLine({x:p.Sn.x,y:p.Sn.y},{x:p.Me.x,y:p.Me.y},'#e11d48',vCtx);
-                if(p.Prn && p.Sn) drawLine({x:p.Prn.x,y:p.Prn.y},{x:p.Sn.x,y:p.Sn.y},'#0891b2',vCtx);
-                if(p.Sn && p.Ls) drawLine({x:p.Sn.x,y:p.Sn.y},{x:p.Ls.x,y:p.Ls.y},'#0891b2',vCtx);
-            }
+            desenharLinhasEstudoNoCtx(dados, chaveEstudo, vCtx);
 
             for (let k in p) {
                 if (p[k]) {
@@ -165,8 +175,10 @@ async function exportarDossierClinicoCompletoPDF() {
     element.style.color = '#0f172a';
 
     // Aguarda o carregamento real das imagens antes de gerar o canvas
+    // (a fotometria facial tem duas vistas independentes: frente e perfil)
     let cefaloImgData = await gerarCanvasVirtualFundidoAsync('cefalometria');
-    let facialImgData = await gerarCanvasVirtualFundidoAsync('facial');
+    let facialFrenteImgData = await gerarCanvasVirtualFundidoAsync('facialFrente');
+    let facialPerfilImgData = await gerarCanvasVirtualFundidoAsync('facialPerfil');
 
     const nomeSafe = escaparHTML(nome);
     const codSafe = escaparHTML(cod);
@@ -183,7 +195,7 @@ async function exportarDossierClinicoCompletoPDF() {
     const tipoAnaliseAtual = tipoAnaliseSelect ? tipoAnaliseSelect.value : 'steiner';
     const nomesAnalise = { steiner: 'Steiner', downs: 'Downs', tweed: 'Tweed', todas: 'Todas as Análises' };
     let linhasCefalo = calcularResultadosCefalometricosCompleto(tipoAnaliseAtual);
-    let linhasFaciais = calcularResultadosFaciaisCompleto();
+    let relatorioFacial = calcularRelatorioFacialCompleto();
 
     // CONTEÚDO DA PÁGINA 1
     let pdfHtml = `
@@ -259,12 +271,11 @@ async function exportarDossierClinicoCompletoPDF() {
         blocoModelos = `<p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:20px;">Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)</p>`;
     }
 
-    pdfHtml += `
-        <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
-            ${blocoModelos}
-
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px; margin-top:25px;">${++secNum}. Resultados da Análise Facial</h3>
+    // Bloco de resultados faciais de uma vista (cabeçalho + tabela), reutilizado para frente e perfil
+    function blocoResultadosFacialPDF(titulo, subtitulo, linhas) {
+        return `
+            <h4 style="color:#0284c7; font-size:10pt; margin:0 0 4px 0;">${titulo}</h4>
+            <p style="font-size:8.5pt; color:#64748b; margin:0 0 6px 0;">${subtitulo}</p>
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:15px;">
                 <thead>
                     <tr style="background:#f1f5f9;">
@@ -274,9 +285,20 @@ async function exportarDossierClinicoCompletoPDF() {
                         <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status</th>
                     </tr>
                 </thead>
-                <tbody>${renderizarTabelaResultadosPDF(linhasFaciais)}</tbody>
-            </table>
-            
+                <tbody>${renderizarTabelaResultadosPDF(linhas)}</tbody>
+            </table>`;
+    }
+
+    pdfHtml += `
+        <div style="page-break-before: always; page-break-inside: avoid !important;">
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
+            ${blocoModelos}
+
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px; margin-top:25px;">${++secNum}. Resultados da Análise Fotométrica Facial (Frente e Perfil)</h3>
+            ${blocoResultadosFacialPDF('Vista de FRENTE — proporções e simetria', 'Terços verticais, proporções horizontais, linha bipupilar e assimetrias entre lado direito e esquerdo.', relatorioFacial.frente)}
+            <div style="page-break-inside: avoid !important;">
+                ${blocoResultadosFacialPDF('Vista de PERFIL — perfil mole e terço inferior', 'Ângulos nasolabial, mentolabial e cervicomental, convexidade facial e posição do lábio superior.', relatorioFacial.perfil)}
+            </div>
             <p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin:0; margin-top:15px;"><strong>Conclusões & Anomalias Detetadas:</strong><br>${anomaliasSafe || 'Sem notas adicionais inseridas.'}</p>
         </div>
     `;
@@ -294,15 +316,20 @@ async function exportarDossierClinicoCompletoPDF() {
         `;
     }
 
-    // PÁGINA DEDICADA EXCLUSIVA PARA A FOTOMETRIA FACIAL
-    if (facialImgData) {
-        let dimF = await obterDimensoesImagem(facialImgData);
+    // PÁGINAS DEDICADAS À FOTOMETRIA FACIAL — UMA POR VISTA (FRENTE / PERFIL)
+    const paginasFacial = [
+        { dados: facialFrenteImgData, titulo: 'Traçado Fotométrico Facial — Vista de Frente', nota: 'Marcos da linha média, planos horizontais (bipupilar, bizigomático, bucal e interalar) e proporções faciais.' },
+        { dados: facialPerfilImgData, titulo: 'Traçado Fotométrico Facial — Vista de Perfil', nota: 'Sequência do perfil mole e linha de referência Gl–Pg\'.' }
+    ];
+    for (const pagina of paginasFacial) {
+        if (!pagina.dados) continue;
+        let dimF = await obterDimensoesImagem(pagina.dados);
         let estiloF = estiloImgSeguro(dimF.w, dimF.h);
         pdfHtml += `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. Traçado Fotométrico Facial</h3>
-                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Marcos e proporções faciais mapeados digitalmente.</span>
-                <img src="${facialImgData}" style="${estiloF} border:1px solid #cbd5e1; border-radius:4px;">
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. ${pagina.titulo}</h3>
+                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">${pagina.nota}</span>
+                <img src="${pagina.dados}" style="${estiloF} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
         `;
     }

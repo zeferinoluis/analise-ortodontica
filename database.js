@@ -24,17 +24,9 @@ function resetarBaseDeDados() {
     if (!conf2) return;
 
     const finalizarReset = function() {
-        appState = {
-            tipoEstudo: 'cefalometria',
-            estudosImagens: {
-                cefalometria: { pontos: { S: null, N: null, A: null, B: null, Pg: null, Me: null, Gn: null, Go: null, Or: null, Po: null, ENA: null, ENP: null, U1i: null, U1a: null, L1i: null, L1a: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 },
-                facial: { pontos: { Tr: null, Na: null, Gl: null, Prn: null, Sn: null, Ls: null, Me: null, PgL: null, Zy_D: null, Zy_E: null, Ch_D: null, Ch_E: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 }
-            },
-            historicoConsultas: [],
-            imagensPaciente: {},
-            dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 },
-            modelosRegistados: false
-        };
+        // Repõe a estrutura completa por omissão (inclui as duas vistas da fotometria facial)
+        appState = appStatePorOmissao();
+        appState.subVistaFacial = 'frente';
         document.getElementById('paciente-nome').value = '';
         document.getElementById('paciente-id').value = '';
         document.getElementById('paciente-nascimento').value = '';

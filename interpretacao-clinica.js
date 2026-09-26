@@ -79,6 +79,77 @@ function interpretarPerfilFacial(nasolabial, convexidade) {
     return partes.join('');
 }
 
+// --------------------------------------------------------------------------
+// FOTOMETRIA FACIAL — FRENTE: proporções verticais/horizontais e simetria
+// --------------------------------------------------------------------------
+function interpretarFrenteFacial(linhas) {
+    if (!linhas || !linhas.length) return '';
+    const porLabel = (inicio) => linhas.find(l => l.label.indexOf(inicio) === 0);
+    const partes = ['Análise da fotografia de FRENTE:'];
+
+    const tercos = [porLabel('Terço Superior'), porLabel('Terço Médio'), porLabel('Terço Inferior')].filter(Boolean);
+    if (tercos.length === 3) {
+        const v = tercos.map(t => parseFloat(t.valor));
+        partes.push(`Terços verticais — superior ${v[0].toFixed(1)}%, médio ${v[1].toFixed(1)}%, inferior ${v[2].toFixed(1)}%.`);
+        const desvios = tercos.filter(t => t.status === 'status-dev');
+        if (!desvios.length) partes.push('Proporção vertical equilibrada (terços sensivelmente iguais).');
+        else partes.push(`Terço(s) fora do equilíbrio de 33,3%: ${desvios.map(t => t.label.replace('Terço ', '') + ' ' + t.valor).join(', ')} — confirmar se o Trichion está bem marcado antes de valorizar este desvio.`);
+        const rel = porLabel('Relação Terço Médio');
+        if (rel) partes.push(`Relação terço médio/inferior ${parseFloat(rel.valor).toFixed(2)} (${rel.texto}).`);
+    }
+
+    const bucal = porLabel('Largura Bucal');
+    if (bucal) partes.push(`Largura bucal/largura bizigomática ${bucal.valor} — ${bucal.texto}.`);
+    const interalar = porLabel('Largura Interalar');
+    if (interalar) partes.push(`Largura interalar/largura bucal ${interalar.valor} — ${interalar.texto}.`);
+
+    const inclinacao = porLabel('Inclinação da Linha Bipupilar');
+    if (inclinacao) partes.push(`Linha bipupilar: inclinação de ${inclinacao.valor} em relação à horizontal — ${inclinacao.texto}.`);
+
+    const assimetrias = linhas.filter(l => l.label.indexOf('Assimetria') === 0);
+    const assimetriasRelevantes = assimetrias.filter(l => l.status === 'status-dev');
+    if (assimetrias.length && !assimetriasRelevantes.length) partes.push('Sem assimetrias relevantes entre lado direito e esquerdo nos pontos marcados.');
+    else if (assimetriasRelevantes.length) partes.push(`Assimetria(s) a confirmar clinicamente: ${assimetriasRelevantes.map(l => l.label.replace('Assimetria ', '') + ' ' + l.valor).join(', ')}.`);
+
+    if (partes.length === 1) return '';
+    return partes.join(' ');
+}
+
+// --------------------------------------------------------------------------
+// FOTOMETRIA FACIAL — PERFIL: perfil mole e harmonia do terço inferior
+// --------------------------------------------------------------------------
+function interpretarPerfilFacialCompleto(linhas) {
+    if (!linhas || !linhas.length) return '';
+    const porLabel = (inicio) => linhas.find(l => l.label.indexOf(inicio) === 0);
+    const partes = ['Análise da fotografia de PERFIL:'];
+
+    const convexidade = porLabel('Convexidade Facial');
+    const nasolabial = porLabel('Ângulo Nasolabial');
+    const blocoBase = interpretarPerfilFacial(
+        nasolabial ? parseFloat(nasolabial.valor) : null,
+        convexidade ? parseFloat(convexidade.valor) : null
+    );
+    if (blocoBase) partes.push(blocoBase);
+
+    const convexidadeNasal = porLabel('Convexidade Nasal');
+    if (convexidadeNasal) partes.push(`Convexidade nasal (Gl-Prn-Pg'): ${convexidadeNasal.valor}.`);
+
+    const mentolabial = porLabel('Ângulo Mentolabial');
+    if (mentolabial) partes.push(`Ângulo mentolabial (Li-Bs-Pg'): ${mentolabial.valor} — ${mentolabial.texto}.`);
+
+    const cervicomental = porLabel('Ângulo Cervicomental');
+    if (cervicomental) partes.push(`Ângulo cervicomental: ${cervicomental.valor} — ${cervicomental.texto}.`);
+
+    const labialSn = porLabel('Ângulo do Arco Labial');
+    if (labialSn) partes.push(`Ângulo do arco labial (Sn): ${labialSn.valor}.`);
+
+    const labioLinha = linhas.find(l => l.label.indexOf("Lábio Superior vs. Linha Gl") === 0 && l.label.indexOf('(mm)') < 0);
+    if (labioLinha) partes.push(`Posição do lábio superior em relação à linha Gl-Pg': ${labioLinha.texto.toLowerCase()}.`);
+
+    if (partes.length === 1) return '';
+    return partes.join(' ');
+}
+
 function interpretarTransversalModelos(korkhausEsp, dPm, ashley, discEspaco, boltonAnt) {
     let partes = [];
     if (dPm < korkhausEsp) partes.push(`Korkhaus sugere atresia maxilar (largura inter-pré-molar ${dPm}mm inferior ao alvo de ${korkhausEsp.toFixed(1)}mm). `);
@@ -116,12 +187,12 @@ function gerarInterpretacaoAutomatica(escopo) {
     }
 
     if (escopo === 'facial' || escopo === 'todas') {
-        const pf = appState.estudosImagens.facial.pontos;
-        let nasolabial = null, convexidade = null;
-        if (pf.Prn && pf.Sn && pf.Ls) nasolabial = obterAngulo(pf.Prn, pf.Sn, pf.Ls);
-        if (pf.Gl && pf.Sn && pf.PgL) convexidade = 180 - obterAngulo(pf.Gl, pf.Sn, pf.PgL);
-        const blocoFacial = interpretarPerfilFacial(nasolabial, convexidade);
-        if (blocoFacial) partes.push(blocoFacial);
+        // As duas vistas são analisadas e descritas em separado; se só uma tiver marcos,
+        // só essa é mencionada (sem inventar resultados para a vista em falta).
+        const linhasFrente = calcularResultadosFaciaisFrente();
+        const linhasPerfil = calcularResultadosFaciaisPerfil();
+        partes.push(interpretarFrenteFacial(linhasFrente));
+        partes.push(interpretarPerfilFacialCompleto(linhasPerfil));
     }
 
     if ((escopo === 'modelos' || escopo === 'todas') && appState.modelosRegistados) {
