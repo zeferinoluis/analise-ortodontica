@@ -134,15 +134,26 @@
                     </div>
 
                     <div id="painel-modelos-controlos" style="display:none;">
-                        <h4>Dados do Arco e Dentes (mm)</h4>
-                        <div class="form-group"><label>Soma 6 dentes antero-sup:</label><input type="number" id="m-sup6" value="45.5" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Soma 6 dentes antero-inf:</label><input type="number" id="m-inf6" value="35.2" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Soma 4 Incisivos Sup:</label><input type="number" id="m-sup4" value="32.0" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Soma 4 Incisivos Inf:</label><input type="number" id="m-inf4" value="24.0" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Distância Inter-Pré-Molares:</label><input type="number" id="m-distpm" value="35.0" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Distância Inter-Molares:</label><input type="number" id="m-distm" value="47.0" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Perímetro de Arco Disponível:</label><input type="number" id="m-perimetro" value="74.0" oninput="executarCalculosModelosPuros()"></div>
-                        <div class="form-group"><label>Soma Mesiostial 10 dentes:</label><input type="number" id="m-soma10" value="78.0" oninput="executarCalculosModelosPuros()"></div>
+                        <h4 style="margin-bottom:4px;">Dentição — Somas Mesio-Distais (mm)</h4>
+                        <p style="font-size:0.72rem; color:#64748b; margin:0 0 8px;">Medidas sobre os modelos de estudo, com compasso de pontas secas. As somas dos 4 incisivos alimentam Bolton, Korkhaus e Pont.</p>
+                        <div class="form-group"><label>Soma 4 Incisivos Superiores:</label><input type="number" step="0.1" id="m-sup4" value="32.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma 4 Incisivos Inferiores:</label><input type="number" step="0.1" id="m-inf4" value="24.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma 6 Anteriores Superiores:</label><input type="number" step="0.1" id="m-sup6" value="45.5" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma 6 Anteriores Inferiores:</label><input type="number" step="0.1" id="m-inf6" value="35.2" oninput="executarCalculosModelosPuros()"></div>
+
+                        <h4 style="margin-top:14px; margin-bottom:4px;">Larguras Transversais (mm)</h4>
+                        <div class="form-group"><label>Inter-Pré-Molar Superior:</label><input type="number" step="0.1" id="m-distpm-sup" value="35.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Inter-Molar Superior:</label><input type="number" step="0.1" id="m-distm-sup" value="47.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Inter-Pré-Molar Inferior:</label><input type="number" step="0.1" id="m-distpm-inf" value="34.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Inter-Molar Inferior:</label><input type="number" step="0.1" id="m-distm-inf" value="46.0" oninput="executarCalculosModelosPuros()"></div>
+
+                        <h4 style="margin-top:14px; margin-bottom:4px;">Espaço Disponível (mm)</h4>
+                        <p style="font-size:0.72rem; color:#64748b; margin:0 0 8px;">O perímetro e a soma mesiostial dos 10 dentes têm de terminar no mesmo dente (habitualmente o 1.º molar), senão a discrepância de espaço não é comparável.</p>
+                        <div class="form-group"><label>Perímetro de Arco Superior:</label><input type="number" step="0.1" id="m-perimetro-sup" value="76.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma Mesiostial 10 Dentes (sup.):</label><input type="number" step="0.1" id="m-soma10-sup" value="78.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Perímetro de Arco Inferior:</label><input type="number" step="0.1" id="m-perimetro-inf" value="72.0" oninput="executarCalculosModelosPuros()"></div>
+                        <div class="form-group"><label>Soma Mesiostial 10 Dentes (inf.):</label><input type="number" step="0.1" id="m-soma10-inf" value="76.0" oninput="executarCalculosModelosPuros()"></div>
+
                         <button class="save-btn" onclick="processarEGuardarModelos()">Guardar Modelos</button>
                     </div>
 

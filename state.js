@@ -28,7 +28,7 @@ let appState = {
     },
     historicoConsultas: [],
     imagensPaciente: {},
-    dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 },
+    dadosModelosBackup: dadosModelosPorOmissao(),
     modelosRegistados: false
 };
 
@@ -107,9 +107,35 @@ function appStatePorOmissao() {
         },
         historicoConsultas: [],
         imagensPaciente: {},
-        dadosModelosBackup: { sSup6: 45.5, sInf6: 35.2, sSup4: 32.0, sInf4: 24.0, dPm: 35.0, dM: 47.0, perimetro: 74.0, s10: 78.0 },
+        dadosModelosBackup: dadosModelosPorOmissao(),
         modelosRegistados: false
     };
+}
+
+// Valores por omissão da análise de modelos. Versões anteriores guardavam um único
+// perímetro e uma única soma de 10 dentes (assumidos como superiores); a migração
+// converte esses campos para o esquema por arcada sem perder o que foi medido.
+function dadosModelosPorOmissao() {
+    return {
+        sSup4: 32.0, sInf4: 24.0, sSup6: 45.5, sInf6: 35.2,
+        dPmSup: 35.0, dMSup: 47.0, dPmInf: 34.0, dMInf: 46.0,
+        perimetroSup: 76.0, perimetroInf: 72.0, s10sup: 78.0, s10inf: 76.0
+    };
+}
+
+function migrarModelosPorOmissao(guardado) {
+    const base = dadosModelosPorOmissao();
+    if (!guardado || typeof guardado !== 'object') return base;
+    const m = Object.assign({}, guardado);
+    // Campos antigos (ficha gravada antes da separação por arcada)
+    if (m.dPm !== undefined && m.dPmSup === undefined) m.dPmSup = m.dPm;
+    if (m.dM !== undefined && m.dMSup === undefined) m.dMSup = m.dM;
+    if (m.perimetro !== undefined && m.perimetroSup === undefined) m.perimetroSup = m.perimetro;
+    if (m.s10 !== undefined && m.s10sup === undefined) m.s10sup = m.s10;
+    delete m.dPm; delete m.dM; delete m.perimetro; delete m.s10;
+    // Campos novos em falta passam a ter o valor por omissão
+    Object.keys(base).forEach(k => { if (m[k] === undefined || m[k] === null) m[k] = base[k]; });
+    return m;
 }
 
 // Devolve a chave de estudo correspondente ao módulo ativo — dentro da Fotométrica Facial
@@ -128,7 +154,7 @@ function normalizarAppState(carregado) {
     resultado.subVistaFacial = carregado.subVistaFacial === 'perfil' ? 'perfil' : 'frente';
     resultado.historicoConsultas = Array.isArray(carregado.historicoConsultas) ? carregado.historicoConsultas : [];
     resultado.imagensPaciente = (carregado.imagensPaciente && typeof carregado.imagensPaciente === 'object') ? carregado.imagensPaciente : {};
-    resultado.dadosModelosBackup = Object.assign(resultado.dadosModelosBackup, carregado.dadosModelosBackup || {});
+    resultado.dadosModelosBackup = migrarModelosPorOmissao(carregado.dadosModelosBackup);
     resultado.modelosRegistados = carregado.modelosRegistados === true;
 
     const fontes = carregado.estudosImagens || {};

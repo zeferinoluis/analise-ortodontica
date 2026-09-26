@@ -33,21 +33,32 @@ function interpretarPadraoVertical(snGoGn) {
     return t;
 }
 
+// U1–NA: angular (norma 22° ± 2) e linear (norma 4 mm ± 2). O angular é a magnitude
+// do ângulo com a linha NA; a direção (protrusão vs. retrusão) vem do linear.
 function interpretarIncisivosSuperiores(angular, linear) {
     if (angular == null || isNaN(angular)) return '';
-    let t = `Incisivo superior (U1–NA): ${angular.toFixed(1)}° / ${linear.toFixed(1)} mm. `;
-    if (angular < 20 || linear < 2) t += `Sugere retroinclinação e/ou pouca protrusão dos incisivos superiores. `;
-    else if (angular > 24 || linear > 6) t += `Sugere proinclinação e/ou protrusão dos incisivos superiores. `;
+    let t = `Incisivo superior (U1–NA): ${angular.toFixed(1)}°`;
+    t += (linear != null && !isNaN(linear)) ? ` / ${linear.toFixed(1)} mm. ` : `. `;
+    const poucoAngulo = angular < 20, muitoAngulo = angular > 24;
+    const poucoLinear = linear != null && linear < 2, muitoLinear = linear != null && linear > 6;
+    if (poucoAngulo && poucoLinear) t += `Retroinclinado e pouco protruído. `;
+    else if (muitoAngulo && muitoLinear) t += `Proinclinado e protruído — compatível com compensação ou com necessidade de retração/controlo de torque. `;
+    else if (poucoAngulo) t += `Tendência a retroinclinação. `;
+    else if (muitoAngulo) t += `Tendência a proinclinação. `;
+    else if (linear != null && !isNaN(linear) && (poucoLinear || muitoLinear)) t += poucoLinear ? `Inclinação normal com pouca protrusão. ` : `Inclinação normal com protrusão aumentada. `;
     else t += `Dentro dos valores de referência. `;
     return t;
 }
 
+// L1–NB: angular (norma 25° ± 2) e linear (norma 4 mm ± 2)
 function interpretarIncisivosInferiores(angular, linear) {
     if (linear == null || isNaN(linear)) return '';
-    let t = `Incisivo inferior (L1–NB): ${linear.toFixed(1)} mm linear`;
-    t += (angular != null && !isNaN(angular)) ? ` (${angular.toFixed(1)}° angular — confirmar manualmente este valor, o método clássico de Steiner mede o ângulo do lado oposto ao aqui calculado). ` : `. `;
-    if (linear > 6) t += `Sugere protrusão/inclinação vestibular dos incisivos inferiores, com possível componente de compensação dentária. `;
-    else if (linear < 2) t += `Sugere retroinclinação dos incisivos inferiores. `;
+    let t = `Incisivo inferior (L1–NB): ${linear.toFixed(1)} mm`;
+    t += (angular != null && !isNaN(angular)) ? ` / ${angular.toFixed(1)}°. ` : `. `;
+    const poucoAngulo = angular != null && !isNaN(angular) && angular < 23;
+    const muitoAngulo = angular != null && !isNaN(angular) && angular > 27;
+    if (linear > 6 || muitoAngulo) t += `Sugere protrusão/inclinação vestibular dos incisivos inferiores, com possível componente de compensação dentária. `;
+    else if (linear < 2 || poucoAngulo) t += `Sugere retroinclinação dos incisivos inferiores. `;
     else t += `Dentro dos valores de referência. `;
     return t;
 }
@@ -150,14 +161,58 @@ function interpretarPerfilFacialCompleto(linhas) {
     return partes.join(' ');
 }
 
-function interpretarTransversalModelos(korkhausEsp, dPm, ashley, discEspaco, boltonAnt) {
-    let partes = [];
-    if (dPm < korkhausEsp) partes.push(`Korkhaus sugere atresia maxilar (largura inter-pré-molar ${dPm}mm inferior ao alvo de ${korkhausEsp.toFixed(1)}mm). `);
-    if (ashley < 43) partes.push(`Índice de Ashley Howe (${ashley.toFixed(1)}%) sugere estreitamento da base apical. `);
-    if (discEspaco < 0) partes.push(`Discrepância de espaço negativa (${discEspaco.toFixed(1)} mm) — sugere apinhamento. `);
-    else if (discEspaco > 2) partes.push(`Discrepância de espaço positiva (${discEspaco.toFixed(1)} mm) — sugere espaçamento/diastemas. `);
-    if (Math.abs(boltonAnt - 77.2) > 1.6) partes.push(`Índice de Bolton anterior (${boltonAnt.toFixed(1)}%) fora da norma — sugere discrepância de massa dentária, a considerar no acabamento. `);
-    if (!partes.length) return `Análise de modelos dentro dos valores de referência, sem discrepâncias transversais ou de espaço relevantes. `;
+// Análise de modelos: usa as mesmas métricas do ecrã (calcularMetricasModelos).
+// Cada frase só aparece se o dado existir — nunca inventa resultados.
+function interpretarModelos(r) {
+    if (!r) return '';
+    const partes = ['Análise de modelos de estudo: '];
+    const N = NORMAS_MODELOS;
+
+    if (r.boltonAnterior !== null) {
+        const desvio = r.boltonAnterior - N.boltonAnterior;
+        let t = `Bolton anterior ${r.boltonAnterior.toFixed(1)}% (norma ${N.boltonAnterior}% ± ${N.boltonAnteriorTol}). `;
+        if (Math.abs(desvio) <= N.boltonAnteriorTol) t += 'Sem discrepância de massa dentária anterior. ';
+        else t += desvio > 0
+            ? 'Excesso de massa dentária inferior (ou défice superior) para o sector anterior — a considerar na distribuição de espaço e no acabamento. '
+            : 'Excesso de massa dentária superior (ou défice inferior) no sector anterior. ';
+        partes.push(t);
+    }
+    if (r.boltonTotal !== null) {
+        const desvio = r.boltonTotal - N.boltonTotal;
+        let t = `Bolton total ${r.boltonTotal.toFixed(1)}% (norma ${N.boltonTotal}% ± ${N.boltonTotalTol}). `;
+        if (Math.abs(desvio) <= N.boltonTotalTol) t += 'Proporção global entre arcadas dentro do esperado. ';
+        else t += desvio > 0 ? 'Arcada inferior com massa dentária global excessiva. ' : 'Arcada superior com massa dentária global excessiva. ';
+        partes.push(t);
+    }
+
+    const transversal = [];
+    const confronto = (nome, real, previsto) => {
+        if (real === undefined || real === null || !previsto) return;
+        const d = real - previsto;
+        if (Math.abs(d) <= 4) transversal.push(`${nome} concordante (${real.toFixed(1)} mm vs. ${previsto.toFixed(1)} mm previsto)`);
+        else transversal.push(`${nome} ${d < 0 ? 'estreita' : 'larga'} em ${Math.abs(d).toFixed(1)} mm (${real.toFixed(1)} mm vs. ${previsto.toFixed(1)} mm previsto)`);
+    };
+    confronto('largura inter-pré-molar superior', r.dados.dPmSup, r.korkhausPm);
+    confronto('largura inter-molar superior', r.dados.dMSup, r.korkhausM);
+    confronto('largura inter-pré-molar inferior', r.dados.dPmInf, r.pontPmInf);
+    confronto('largura inter-molar inferior', r.dados.dMInf, r.pontMInf);
+    if (transversal.length) partes.push(`Korkhaus/Pont: ${transversal.join('; ')}. `);
+
+    if (r.ashleySup !== null || r.ashleyInf !== null) {
+        const desc = (rot, v) => v === null ? null : `${rot} ${v.toFixed(1)}% (${v < 40 ? 'arco apertado para os dentes — apinhamento provável' : (v < N.ashleyMin ? 'ligeiramente apertado' : (v > N.ashleyMax ? 'arco amplo para os dentes' : 'equilibrado'))})`;
+        const itens = [desc('superior', r.ashleySup), desc('inferior', r.ashleyInf)].filter(Boolean);
+        partes.push(`Índice de Howes — perímetro do arco sobre a metade da soma dos 10 dentes (norma ${N.ashleyMin}–${N.ashleyMax}%): ${itens.join('; ')}. `);
+    }
+
+    const espaco = [];
+    if (Math.abs(r.discrepanciaSup) > 2) espaco.push(`superior ${r.discrepanciaSup > 0 ? 'com sobra de' : 'com défice de'} ${Math.abs(r.discrepanciaSup).toFixed(1)} mm`);
+    if (Math.abs(r.discrepanciaInf) > 2) espaco.push(`inferior ${r.discrepanciaInf > 0 ? 'com sobra de' : 'com défice de'} ${Math.abs(r.discrepanciaInf).toFixed(1)} mm`);
+    partes.push(espaco.length
+        ? `Discrepância de espaço: ${espaco.join(' e ')} — ${r.discrepanciaSup < 0 || r.discrepanciaInf < 0 ? 'compatível com apinhamento nessa arcada' : 'compatível com espaçamento/diastemas'}. `
+        : 'Discrepância de espaço equilibrada nas duas arcadas. ');
+
+    if (r.avisos && r.avisos.length) partes.push(`A verificar: ${r.avisos.join(' ')}`);
+
     return partes.join('');
 }
 
@@ -178,12 +233,17 @@ function gerarInterpretacaoAutomatica(escopo) {
 
         if (p.S && p.N && p.Go && p.Gn) partes.push(interpretarPadraoVertical(anguloEntreLinhas(p.S, p.N, p.Go, p.Gn)));
 
-        if (scale) {
-            if (p.U1a && p.U1i && p.N && p.A) partes.push(interpretarIncisivosSuperiores(anguloEntreLinhas(p.U1a, p.U1i, p.N, p.A), distanciaPontoLinha(p.U1i, p.N, p.A) / scale));
-            if (p.L1a && p.L1i && p.N && p.B) partes.push(interpretarIncisivosInferiores(anguloEntreLinhas(p.L1a, p.L1i, p.N, p.B), distanciaPontoLinha(p.L1i, p.N, p.B) / scale));
-        }
+        // U1–NA e L1–NB usam anguloComNorma (magnitude do ângulo com a linha de
+        // referência); sem calibração da régua a parte linear é omitida.
+        const linearU1 = scale && p.U1i && p.N && p.A ? distanciaPontoLinha(p.U1i, p.N, p.A) / scale : null;
+        const linearL1 = scale && p.L1i && p.N && p.B ? distanciaPontoLinha(p.L1i, p.N, p.B) / scale : null;
+        if (p.U1a && p.U1i && p.N && p.A) partes.push(interpretarIncisivosSuperiores(anguloComNorma(p.U1i, p.U1a, p.N, p.A, 22), linearU1));
+        if (p.L1a && p.L1i && p.N && p.B) partes.push(interpretarIncisivosInferiores(anguloComNorma(p.L1i, p.L1a, p.N, p.B, 25), linearL1));
 
-        if (p.U1a && p.U1i && p.L1a && p.L1i) partes.push(interpretarAnguloInterincisal(anguloEntreLinhas(p.U1a, p.U1i, p.L1a, p.L1i)));
+        const impaTxt = p.Go && p.Gn && p.L1i && p.L1a ? `IMPA ${anguloImpa(p.L1a, p.L1i, p.Go, p.Gn).toFixed(1)}° (norma 90° ± 5). ` : '';
+        if (impaTxt) partes.push(impaTxt);
+
+        if (p.U1a && p.U1i && p.L1a && p.L1i) partes.push(interpretarAnguloInterincisal(anguloInterincisal(p.U1a, p.U1i, p.L1a, p.L1i)));
     }
 
     if (escopo === 'facial' || escopo === 'todas') {
@@ -196,12 +256,7 @@ function gerarInterpretacaoAutomatica(escopo) {
     }
 
     if ((escopo === 'modelos' || escopo === 'todas') && appState.modelosRegistados) {
-        const m = appState.dadosModelosBackup;
-        const boltonAnt = (m.sInf6 / m.sSup6) * 100;
-        const korkhausEsp = (m.sSup4 * 100) / 81;
-        const ashley = (m.dPm / m.s10) * 100;
-        const discEspaco = m.perimetro - m.s10;
-        partes.push(interpretarTransversalModelos(korkhausEsp, m.dPm, ashley, discEspaco, boltonAnt));
+        partes.push(interpretarModelos(calcularMetricasModelos(appState.dadosModelosBackup)));
     }
 
     if (!partes.length) {

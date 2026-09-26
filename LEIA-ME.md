@@ -34,6 +34,25 @@
 - O **dossiê PDF** ganhou uma secção "Resultados da Análise Fotométrica Facial (Frente e Perfil)" com as duas tabelas e **duas páginas de traçado**, uma por fotografia; o histórico de evolução registra, numa só entrada, o resumo das duas vistas.
 - Fichas antigas (com um único estudo facial) continuam a abrir: os marcos e a fotografia existentes são copiados para as duas vistas, para que nenhum dado marcado se perca — basta apagar os marcos que não pertencem a cada vista.
 
+## Nova funcionalidade: cefalometria e modelos corrigidos e aprofundados
+
+### Cefalometria — correções de cálculo
+- **Medições angulares com direção anatómica**: IMPA, FMIA, U1–NA, L1–NB e ângulo interincisal eram medidos como ângulo entre retas-suporte (0–90°), o que devolvia o **suplemento** do valor clínico sempre que o dente estava inclinado para o lado oposto ao da norma. Agora o IMPA é medido com direção (perpendicular ao plano mandibular = 90°, retroinclinado < 90°, vestibularizado > 90°) e o **FMIA é derivado** pela identidade de Tweed (FMA + FMIA + IMPA = 180°), pelo que os três ângulos são sempre coerentes entre si.
+- **Ângulo interincisal** passou a usar a convenção clínica: incisivos convergentes ~130°, paralelos ~180°; abaixo de 90° o resultado é assinalado como suspeito (pode indicar pontos trocados).
+- **Eixo Y (Downs)** passou a ser o ângulo agudo entre S–Gn e o plano FH (norma 59,4°), deixando de depender do sentido com que Or e Po foram marcados.
+- **U1–NA e L1–NB angulares** passaram a ser devolvidos como magnitude (0–90°) com a indicação explícita de que a direção (protrusão/retrusão) se lê nas medidas **lineares** correspondentes — que exigem a calibração da régua e aparecem assinaladas quando ela não existe.
+- **Planos de referência por análise**, agora indicados no ecrã e no PDF: Steiner → plano SN; Downs → plano de Frankfort (Or–Po); Tweed → FH + plano mandibular.
+- Acrescentado o **controlo do triângulo de Tweed** (FMA + FMIA + IMPA = 180°) e a **proporção de alturas faciais posterior/anterior** (S-Go / N-Me).
+
+### Análise de modelos — correções e novos índices
+- **Índice de Bolton estava errado**: era calculado como soma dos 6 anteriores inferiores ÷ soma dos 6 superiores, que é a proporção *total*, e apresentado como Bolton anterior. Agora existem os dois, com as normas corretas: **Bolton anterior** (S4inf/S4sup, 77,2% ± 1,6) e **Bolton total** (S6inf/S6sup, 91,3% ± 1,9).
+- **Korkhaus** usava a soma dos 6 anteriores com o fator dos 4 incisivos. Agora usa a **soma dos 4 incisivos superiores** (largura inter-pré-molar prevista = S4sup × 100/80; inter-molar = S4sup × 100/64) e foi acrescentado o **índice de Pont** para a arcada inferior (S4inf × 100/80 e 100/64), com confronto direto entre largura prevista e real.
+- **Índice de Howes** passou a ser calculado na forma interpretável — perímetro do arco sobre a metade da soma dos 10 dentes (norma 43–45%) — em vez do quociente direto dentes/perímetro, que dava valores sem significado clínico.
+- **Discrepância de espaço por arcada** (perímetro − soma mesiostial), agora com o **perímetro escolhido pelo clínico** (deixou de ser sempre 74 mm) e com aviso quando as duas medições não podem ser comparadas.
+- Painel de entrada reorganizado por secções (dentição, larguras transversais, espaço disponível) com os campos que faltavam: **larguras e perímetros inferiores** e **soma mesiostial dos 10 dentes por arcada**.
+- **Validações**: entrar `0` num campo deixou de ser substituído pelo valor por omissão; campos vazios ou negativos ficam assinalados a vermelho; discrepâncias implausíveis (> 25 mm) e somas fora do intervalo habitual geram avisos de "verificar antes de concluir", mostrados no ecrã e no PDF.
+- A interpretação automática e o dossiê PDF passaram a usar **as mesmas funções de cálculo do ecrã** (sem fórmulas duplicadas), incluindo os avisos de coerência.
+
 ## Nota sobre as normas cefalométricas/faciais
 Os valores de referência (Steiner 1953, Downs 1948, Tweed 1954, e proporções faciais clássicas) são os habitualmente citados em bibliografia ortodôntica-padrão. Servem como apoio de triagem — a interpretação clínica final é sempre do profissional responsável.
 

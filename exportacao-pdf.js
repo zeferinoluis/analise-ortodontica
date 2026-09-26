@@ -185,11 +185,8 @@ async function exportarDossierClinicoCompletoPDF() {
     const indicacoesSafe = escaparHTML(document.getElementById('indicacoes-gerais').value);
     const anomaliasSafe = escaparHTML(document.getElementById('anomalias-obs').value);
 
-    let m = appState.dadosModelosBackup;
-    let boltonAnt = (m.sInf6 / m.sSup6) * 100;
-    let korkhausEsp = (m.sSup4 * 100) / 81;
-    let ashley = (m.dPm / m.s10) * 100;
-    let discEspaco = m.perimetro - m.s10;
+    // Métricas de modelos: mesma função usada no ecrã (nunca fórmulas duplicadas)
+    const resultadosModelos = calcularResultadosModelos();
 
     const tipoAnaliseSelect = document.getElementById('tipo-analise-cefalo');
     const tipoAnaliseAtual = tipoAnaliseSelect ? tipoAnaliseSelect.value : 'steiner';
@@ -238,19 +235,42 @@ async function exportarDossierClinicoCompletoPDF() {
                 </thead>
                 <tbody>${renderizarTabelaResultadosPDF(linhasCefalo)}</tbody>
             </table>
+            <p style="font-size:8.5pt; color:#64748b; margin:0 0 18px 0; line-height:1.5;">
+                <strong>Convenções de medição:</strong> cada análise usa o seu plano de referência clássico — Steiner: plano SN; Downs: plano de Frankfort (Or–Po); Tweed: FH com plano mandibular (Go–Gn), onde FMA = FMIA + IMPA.
+                As medições angulares dos incisivos seguem a convenção clínica sobre o eixo do dente (bordo incisal → ápice): U1–NA, L1–NB e IMPA são devolvidos no intervalo 0–180° que contém a norma publicada (U1–NA 22°, L1–NB 25°, IMPA 90°).
+                As medidas lineares (N-S, U1–NA e L1–NB lineares) exigem a calibração da régua; sem calibração aparecem assinaladas como tal.
+            </p>
         </div>
     `;
 
-    // Estados clínicos calculados com a MESMA lógica do ecrã (nunca texto fixo)
-    const stBolton = Math.abs(boltonAnt - 77.2) <= 1.6;
-    const stKorkhaus = !(m.dPm < korkhausEsp);
-    const stAshley = !(ashley < 43);
-    const stEspaco = !(discEspaco < 0);
+    // Bloco de modelos gerado a partir das MESMAS linhas do ecrã (Bolton ant./total,
+    // Korkhaus e Pont, Howes e discrepância de espaço por arcada), com os avisos de coerência.
     const corOK = '#16a34a', corDev = '#dc2626';
+    const corLinha = { 'status-ok': corOK, 'status-dev': corDev, '': '#475569' };
+
+    function linhasModelosParaPDF(linhas) {
+        let html = ''; let grupoAtual = null;
+        linhas.forEach(l => {
+            if (l.label.indexOf('—') === 0) {
+                html += `<tr><td colspan="4" style="padding:5px 6px; border:1px solid #cbd5e1; background:#f8fafc; color:#64748b; font-style:italic;">${escaparHTML(l.label.replace(/—/g, '').trim())}</td></tr>`;
+                grupoAtual = l.grupo;
+                return;
+            }
+            if (l.grupo !== grupoAtual) {
+                grupoAtual = l.grupo;
+                html += `<tr><td colspan="4" style="padding:5px 6px; border:1px solid #cbd5e1; background:#eef2f7; font-weight:bold; color:#0284c7;">${escaparHTML(grupoAtual)}</td></tr>`;
+            }
+            html += `<tr><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.label)}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.valor) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.norma) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${corLinha[l.status] || '#475569'};">${escaparHTML(l.texto) || '—'}</td></tr>`;
+        });
+        return html;
+    }
 
     let blocoModelos;
     if (appState.modelosRegistados) {
-        blocoModelos = `
+        const avisosModelos = resultadosModelos.avisos.length
+            ? `<p style="font-size:9pt; background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px 10px; border-radius:4px; margin:0 0 10px 0;"><strong>Verificar antes de concluir:</strong><br>${resultadosModelos.avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}</p>`
+            : '';
+        blocoModelos = avisosModelos + `
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
                 <thead>
                     <tr style="background:#f1f5f9;">
@@ -260,12 +280,7 @@ async function exportarDossierClinicoCompletoPDF() {
                         <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status Clínico</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Bolton Anterior</td><td style="padding:6px; border:1px solid #cbd5e1;">${boltonAnt.toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">77.2% ± 1.6%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stBolton?corOK:corDev};">${stBolton?'Normal':'Discrepância de Massa Dentária'}</td></tr>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Korkhaus (Largura Alvo)</td><td style="padding:6px; border:1px solid #cbd5e1;">${korkhausEsp.toFixed(1)} mm</td><td style="padding:6px; border:1px solid #cbd5e1;">Real PM: ${m.dPm}mm</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stKorkhaus?corOK:corDev};">${stKorkhaus?'OK':'Atresia'}</td></tr>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">Ashley Howe (Índice Basal)</td><td style="padding:6px; border:1px solid #cbd5e1;">${ashley.toFixed(1)}%</td><td style="padding:6px; border:1px solid #cbd5e1;">43.0%</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stAshley?corOK:corDev};">${stAshley?'OK':'Estreitamento'}</td></tr>
-                    <tr><td style="padding:6px; border:1px solid #cbd5e1;">TSALD / Careys / Nance</td><td style="padding:6px; border:1px solid #cbd5e1;">${discEspaco.toFixed(1)} mm</td><td style="padding:6px; border:1px solid #cbd5e1;">0.0 mm</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${stEspaco?corOK:corDev};">${stEspaco?'Sobra de Espaço':'Apinhamento'}</td></tr>
-                </tbody>
+                <tbody>${linhasModelosParaPDF(resultadosModelos.linhas)}</tbody>
             </table>`;
     } else {
         blocoModelos = `<p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:20px;">Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)</p>`;
