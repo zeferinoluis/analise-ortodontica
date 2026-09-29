@@ -1,55 +1,42 @@
-ATUALIZAÇÃO DA APLICAÇÃO NO GITHUB PAGES
-========================================
+ATUALIZAÇÃO DA APLICAÇÃO NO GITHUB PAGES  —  versão 2026-09-29b
+================================================================
 
-O que está publicado no GitHub ainda é uma versão antiga do exportador de
-dossiê. É por isso que continua a cortar a análise de modelos, a separar o
-título da análise e a deixar o esquema das larguras cortado.
-
-Para corrigir, carregue para o repositório TODOS os ficheiros deste pacote,
-substituindo os que lá estão. Nenhum ficheiro de dados ou de pacientes é
-afetado: são só o programa.
+Carregue para o repositório TODOS os ficheiros deste pacote, substituindo os
+que lá estão. São só o programa: nenhum dado de pacientes é afetado.
 
 
 COMO CONFIRMAR QUE A VERSÃO NOVA ESTÁ ATIVA
 -------------------------------------------
-1. Abra a aplicação.
+1. Abra a aplicação pelo link do GitHub Pages.
 2. Vá ao separador "Evolução & Exportação".
 3. Por baixo do texto de ajuda deve ler:
 
-      · exportação v2026-09-29a
+      · exportação v2026-09-29b
 
-   Se não ler isto, o browser ainda tem a versão antiga: faça
-   Cmd + Shift + R e, se preciso, em DevTools > Application > Service Workers
-   clique em "Unregister" e recarregue.
+   Se não ler isto, o browser ainda tem a versão antiga: Cmd + Shift + R e, se
+   preciso, DevTools > Application > Service Workers > Unregister, e recarregue.
 
 4. Só depois gere o dossiê.
 
-Nota: os scripts do index.html são carregados com "?v=2026-09-29a", pelo que
-o browser é obrigado a ir buscar os ficheiros novos. Sempre que eu alterar
-algum ficheiro, esta versão é incrementada em três sítios (index.html,
-exportacao-pdf.js e service-worker.js).
 
+O QUE MUDOU NESTA VERSÃO (2026-09-29b)
+--------------------------------------
+- As tabelas são divididas em PEDAÇOS de linhas inteiras sempre que têm um
+  título/legenda por cima. Assim o título, a legenda e a primeira parte da
+  tabela ficam sempre na MESMA página, e o resto continua na página seguinte
+  com o cabeçalho repetido.
+- Isto resolve os casos reais (histórico de consultas longo, análise de
+  modelos, análise facial frente/perfil) em que o grupo "título + legenda +
+  tabela" não cabia no espaço que restava da página, deixando o título órfão
+  no fim da página anterior.
+- Verificado com os dados reais do processo 2648V (15 fotografias, histórico de
+  3 consultas, 16 marcos cefalométricos): 23 páginas, nenhuma em branco,
+  nenhuma com conteúdo encostado ao limite inferior, e cada título com a sua
+  análise ou fotografia.
 
 FICHEIROS INCLUÍDOS
 -------------------
 index.html, recovery.html, manifest.json, styles.css,
 utils.js, state.js, database.js, undo-redo.js, canvas-editor.js,
 cephalometry.js, facial.js, models.js, interpretacao-clinica.js,
-ui.js, exportacao-pdf.js, google-drive.js, service-worker.js,
-pasta icons/
-
-
-O QUE FOI CORRIGIDO NESTA VERSÃO (resumo)
------------------------------------------
-- O dossiê é montado em blocos e distribuído por páginas A4: as quebras caem
-  sempre entre blocos inteiros (nunca a meio de uma linha).
-- Títulos de secção e legendas ficam SEMPRE na mesma página que a análise ou a
-  fotografia respectiva.
-- Tabelas maiores do que uma folha (histórico de consultas e, quando necessário,
-  a análise de modelos) são repartidas por LINHAS INTEIRAS, com o cabeçalho
-  repetido. Nenhuma linha é cortada nem perdida.
-- O esquema das larguras transversais é rasterizado em JPG com as dimensões
-  finais e entra completo na página.
-- As imagens são medidas e fixadas em píxeis antes da captura (deixou de haver
-  imagens desaparecidas ou esticadas).
-- Texto antigo com entidades HTML (&#39;) passa a sair como apóstrofo.
+ui.js, exportacao-pdf.js, google-drive.js, service-worker.js, pasta icons/

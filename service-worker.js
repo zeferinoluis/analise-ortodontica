@@ -1,7 +1,7 @@
 // Subir esta versão sempre que os ficheiros da app mudarem: é o que garante que
 // os clientes instalados (PWA/APK) substituem a cache antiga em vez de servirem
 // versões anteriores dos scripts.
-const CACHE_NAME = 'ortoanalytic-cache-v13-17';
+const CACHE_NAME = 'ortoanalytic-cache-v13-18';
 
 // Assets locais — obrigatórios para a instalação offline
 const ASSETS_LOCAIS = [

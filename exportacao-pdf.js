@@ -5,7 +5,7 @@
 // Versão do exportador de dossiê. Serve para confirmar, na consola do browser,
 // que está a correr o código atual e não uma cópia antiga em cache. Subir sempre
 // que este ficheiro (ou index.html / service-worker.js) for alterado.
-const EXPORTACAO_PDF_VERSAO = '2026-09-29a';
+const EXPORTACAO_PDF_VERSAO = '2026-09-29b';
 window.EXPORTACAO_PDF_VERSAO = EXPORTACAO_PDF_VERSAO;
 console.log('OrtoAnalytic: exportação de dossiê, versão ' + EXPORTACAO_PDF_VERSAO);
 
@@ -751,53 +751,114 @@ async function exportarDossierClinicoCompletoPDF() {
         if (atual.length) gruposDeLinhas.push(atual);
         if (gruposDeLinhas.length < 2) return false;
 
-        // Remove o bloco original e cria um bloco por grupo de linhas
-        embalagem.removeChild(caixa);
-        const novos = [];
-        gruposDeLinhas.forEach(grupo => {
-            const novaCaixa = document.createElement('div');
-            novaCaixa.setAttribute('data-pdf-bloco', '1');
-            novaCaixa.style.cssText = 'padding-top:12px;';
-            const tabela = esqueleto.cloneNode(true);
-            const tbody = document.createElement('tbody');
-            grupo.forEach(linha => tbody.appendChild(linha));
-            tabela.appendChild(tbody);
-            novaCaixa.appendChild(tabela);
-            embalagem.appendChild(novaCaixa);
-            novos.push(novaCaixa);
-        });
-        return novos;
+        // Devolve a receita da divisão (esqueleto + grupos de linhas); quem chama
+        // constrói as caixas, uma de cada vez, conforme as vai conseguindo colocar.
+        return { caixa, esqueleto, gruposDeLinhas };
     };
 
-    // Aplica a partição a todos os blocos que não cabem, recalculando as posições
-    const repartirTabelasGrandes = () => {
-        for (let i = 0; i < blocosDOM.length; i++) {
-            if (medidas[i].altura <= LIMITE) continue;
-            const novos = partirTabela(i);
-            if (!novos) continue;
-            // Atualiza as listas paralelas (blocos, blocosDOM, imagensBloco, medidas)
-            const secaoOriginal = medidas[i].secao;
-            blocos.splice(i, 1);
-            blocosDOM.splice(i, 1);
-            imagensBloco.splice(i, 1);
-            const novasMedidas = novos.map((caixa, n) => ({
-                topo: 0, base: 0, altura: 0, secao: secaoOriginal, html: '',
-                alturaMaxMm: null, dimensoes: null, manterJunto: n < novos.length - 1,
-                cumulativas: [],
-            }));
-            novos.forEach((caixa, n) => { blocosDOM.splice(i + n, 0, caixa); imagensBloco.splice(i + n, 0, null); });
-            medidas.splice(i, 1, ...novasMedidas);
-            blocos.splice(i, 0, ...novos.map(() => ({ secao: null, html: '', manterJunto: false })));
-            i += novos.length - 1;
+    // Constrói o bloco correspondente a um grupo de linhas de uma tabela dividida.
+    const caixaDeLinhas = (receita, grupoDeLinhas) => {
+        const novaCaixa = document.createElement('div');
+        novaCaixa.setAttribute('data-pdf-bloco', '1');
+        novaCaixa.style.cssText = 'padding-top:12px;';
+        const tabela = receita.esqueleto.cloneNode(true);
+        const tbody = document.createElement('tbody');
+        grupoDeLinhas.forEach(linha => tbody.appendChild(linha));
+        tabela.appendChild(tbody);
+        novaCaixa.appendChild(tabela);
+        return novaCaixa;
+    };
+
+    // Substitui o bloco `alvo` por UM grupo de linhas da sua tabela e deixa a
+    // receita guardada para os restantes grupos irem sendo colocados depois.
+    const receitas = new Map();   // bloco -> { receita, restantes }
+
+    const substituirPorPartes = (alvo) => {
+        let receita;
+        let proximo;
+        if (receitas.has(alvo)) {
+            const estado = receitas.get(alvo);
+            receita = estado.receita;
+            proximo = estado.restantes.shift();
+            if (!proximo) { receitas.delete(alvo); return false; }
+            if (!estado.restantes.length) receitas.delete(alvo);
+            else receitas.set(alvo, estado);
+        } else {
+            receita = partirTabela(alvo);
+            if (!receita) return false;
+            proximo = receita.gruposDeLinhas.shift();
+            if (receita.gruposDeLinhas.length) receitas.set(alvo, { receita, restantes: receita.gruposDeLinhas });
+            if (receita.caixa && receita.caixa.parentNode) embalagem.removeChild(receita.caixa);
         }
-        // Recalcula todas as posições depois de a lista mudar
-        const topoHost = host.getBoundingClientRect().top;
-        blocosDOM.forEach((d, k) => {
-            const r = d.getBoundingClientRect();
-            medidas[k].topo = r.top - topoHost;
-            medidas[k].base = r.bottom - topoHost;
-            medidas[k].altura = r.height;
+
+        const novaCaixa = caixaDeLinhas(receita, proximo);
+        embalagem.insertBefore(novaCaixa, blocosDOM[alvo] && blocosDOM[alvo].parentNode ? blocosDOM[alvo] : null);
+        if (blocosDOM[alvo] && blocosDOM[alvo].parentNode) embalagem.removeChild(blocosDOM[alvo]);
+        blocosDOM[alvo] = novaCaixa;
+
+        const dentro = document.createElement('div');
+        dentro.innerHTML = novaCaixa.innerHTML;
+        const acumuladas = [];
+        let soma = 0;
+        Array.from(dentro.children).forEach(f => { soma += f.offsetHeight; acumuladas.push(soma); });
+        medidas[alvo] = Object.assign({}, medidas[alvo], {
+            html: novaCaixa.innerHTML,
+            altura: novaCaixa.offsetHeight,
+            cumulativas: acumuladas,
         });
+        return receitas.has(alvo) || true;
+    };
+
+    const repartirTabelasGrandes = () => {
+        const recalcular = () => {
+            const topoHost = host.getBoundingClientRect().top;
+            blocosDOM.forEach((d, k) => {
+                const r = d.getBoundingClientRect();
+                medidas[k].topo = r.top - topoHost;
+                medidas[k].base = r.bottom - topoHost;
+                medidas[k].altura = r.height;
+            });
+            const gs = [];
+            for (let i = 0; i < medidas.length; i++) {
+                const inicio = i;
+                let fim = i;
+                while (fim < medidas.length - 1) {
+                    if (medidas[fim].fimGrupo) break;
+                    if (!medidas[fim].manterJunto) break;
+                    fim++;
+                }
+                gs.push({ inicio, fim });
+                i = fim;
+            }
+            return gs;
+        };
+
+        // Uma tabela é dividida sempre que (a) o grupo a que pertence não cabe numa
+        // folha, ou (b) tem uma legenda/título antes e, no seu conjunto, pode passar
+        // a caber se for dividida em pedaços mais pequenos.
+        const LIMITE_PEDACO = Math.round(LIMITE * 0.62);
+        let voltas = 0;
+        while (voltas++ < 40) {
+            const grupos = recalcular();
+            let alvo = -1;
+            for (const gr of grupos) {
+                const alturaGrupo = medidas[gr.fim].base - medidas[gr.inicio].topo;
+                let melhor = -1, maior = 0;
+                for (let i = gr.inicio; i <= gr.fim; i++) {
+                    if (medidas[i].altura > maior && blocosDOM[i].querySelector('table, tbody')) { maior = medidas[i].altura; melhor = i; }
+                }
+                if (melhor < 0) continue;
+                const temCabecalho = gr.inicio < melhor;
+                if (alturaGrupo > LIMITE || (temCabecalho && medidas[melhor].altura > LIMITE_PEDACO)) {
+                    alvo = melhor;
+                    break;
+                }
+            }
+            if (alvo < 0) break;
+            if (!substituirPorPartes(alvo)) break;
+        }
+
+        recalcular();
     };
 
     repartirTabelasGrandes();
