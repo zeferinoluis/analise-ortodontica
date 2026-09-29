@@ -366,7 +366,7 @@ async function exportarDossierClinicoCompletoPDF() {
             { html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
                 ${cabecalhoTabelaPDF(['Parâmetro', 'Medido', 'Norma', 'Status'])}
                 <tbody>${renderizarTabelaResultadosPDF(linhas)}</tbody>
-            </table>` },
+            </table>`, fimGrupo: true },
         ];
     }
 
@@ -379,16 +379,18 @@ async function exportarDossierClinicoCompletoPDF() {
     const ehTitulo = (html) => /^\s*<h[1-5][\s>]/i.test(String(html || ''));
 
     const blocos = [];
-    const bloco = (secao, html, alturaMaxMm, dimensoes, manterJunto) => {
+    const bloco = (secao, html, alturaMaxMm, dimensoes, manterJunto, fimGrupo) => {
         blocos.push({
             secao: secao || null, html: html, alturaMaxMm: alturaMaxMm || null,
             dimensoes: dimensoes || null, manterJunto: manterJunto === undefined ? ehTitulo(html) : !!manterJunto,
+            fimGrupo: !!fimGrupo,
         });
     };
     const grupo = (secao, blocosDoGrupo) => {
         blocosDoGrupo.forEach(b => blocos.push({
             secao: secao, html: b.html, alturaMaxMm: b.alturaMaxMm || null,
             dimensoes: b.dimensoes || null, manterJunto: b.manterJunto === undefined ? ehTitulo(b.html) : !!b.manterJunto,
+            fimGrupo: !!b.fimGrupo,
         }));
     };
 
@@ -407,7 +409,7 @@ async function exportarDossierClinicoCompletoPDF() {
                 : '';
             bloco(secao, `<div style="background:#f8fafc; border:1px solid #e2e8f0; border-top:${i ? 'none' : '1px solid #e2e8f0'}; border-radius:${i === 0 ? '4px 4px 0 0' : (i === lista.length - 1 ? '0 0 4px 4px' : '0')}; padding:10px 12px;">
                 ${abertura}${paragrafo(escaparHTML(p).replace(/\n/g, '<br>'), 'text-align:justify;')}
-            </div>`);
+            </div>`, null, null, false, true);
         });
     }
 
@@ -429,7 +431,7 @@ async function exportarDossierClinicoCompletoPDF() {
     const secHistorico = numSecao();
     grupo(secHistorico, [
         { html: titulo(`${secHistorico}. Historial de Consultas & Evolução Temporal`) },
-        { html: blocoHistoricoPDF() },
+        { html: blocoHistoricoPDF(), fimGrupo: true },
     ]);
 
     // =============================== 3. CEFALOMETRIA ===============================
@@ -444,7 +446,7 @@ async function exportarDossierClinicoCompletoPDF() {
         { html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
                 ${cabecalhoTabelaPDF(['Parâmetro', 'Medido', 'Norma', 'Status'])}
                 <tbody>${renderizarTabelaResultadosPDF(linhasCefalo)}</tbody>
-            </table>` },
+            </table>`, fimGrupo: true },
         { html: notaConvencoes },
     ]);
 
@@ -459,7 +461,7 @@ async function exportarDossierClinicoCompletoPDF() {
         blocosModelos.push({ html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
                 ${cabecalhoTabelaPDF(['Métrica / Parâmetro', 'Computado', 'Norma de Referência', 'Status Clínico'])}
                 <tbody>${linhasModelosParaPDF(resultadosModelos.linhas)}</tbody>
-            </table>` });
+            </table>`, fimGrupo: true });
         if (resultadosModelos.avisos.length) {
             blocosModelos.push({ html: aviso(`<strong>Verificar antes de concluir:</strong><br>${resultadosModelos.avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}`, '#fffbeb', '#fde68a', '#92400e') });
         }
@@ -487,7 +489,7 @@ async function exportarDossierClinicoCompletoPDF() {
         grupo(secEsquema, [
             { html: titulo(`${secEsquema}. Esquema das Larguras Transversais`) },
             { html: paragrafo('Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.', 'font-size:9.5pt; color:#475569;') , manterJunto: true },
-            { html: `<img src="${desenhoArcadas}" style="display:block; margin:0 auto; object-fit:contain; border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 200, dimensoes: ESQUEMA_ARCADAS_PX },
+            { html: `<img src="${desenhoArcadas}" style="display:block; margin:0 auto; object-fit:contain; border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 200, dimensoes: ESQUEMA_ARCADAS_PX, fimGrupo: true },
         ]);
     }
 
@@ -497,7 +499,7 @@ async function exportarDossierClinicoCompletoPDF() {
         grupo(secCefaloImg, [
             { html: titulo(`${secCefaloImg}. Cefalometria Radiográfica Computadorizada`) },
             { html: paragrafo('Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).', 'font-size:9.5pt; color:#475569;') , manterJunto: true },
-            { html: `<img src="${cefaloImgData}" style="${estiloImagemPDF(228)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 228 },
+            { html: `<img src="${cefaloImgData}" style="${estiloImagemPDF(228)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 228, fimGrupo: true },
         ]);
     }
 
@@ -511,7 +513,7 @@ async function exportarDossierClinicoCompletoPDF() {
         grupo(secFacialImg, [
             { html: titulo(`${secFacialImg}. ${pagina.titulo}`) },
             { html: paragrafo(pagina.nota, 'font-size:9.5pt; color:#475569;') , manterJunto: true },
-            { html: `<img src="${pagina.dados}" style="${estiloImagemPDF(236)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 236 },
+            { html: `<img src="${pagina.dados}" style="${estiloImagemPDF(236)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 236, fimGrupo: true },
         ]);
     }
 
@@ -530,7 +532,7 @@ async function exportarDossierClinicoCompletoPDF() {
             const tituloCompleto = `${secRepositorio}.${idx + 1} — ${txt}`;
             // Título e foto compõem um único canvas (inseparáveis no PDF)
             const imgComposta = await gerarImagemComTitulo(repositorio[key], tituloCompleto);
-            bloco(secRepositorio, `<div style="text-align:center;"><img src="${imgComposta}" style="${estiloImagemPDF(252)}"></div>`, 252);
+            bloco(secRepositorio, `<div style="text-align:center;"><img src="${imgComposta}" style="${estiloImagemPDF(252)}"></div>`, 252, null, undefined, true);
         }
     }
 
@@ -595,6 +597,20 @@ async function exportarDossierClinicoCompletoPDF() {
         im.style.objectFit = 'contain';
     };
 
+    // Guarda uma cópia de cada bloco ANTES de o instrumentar com os marcadores de
+    // corte seguro. As cópias não vão para o DOM (não custam layout) e são a fonte
+    // para reconstruir os blocos que forem partidos entre páginas.
+    const copiasBloco = blocos.map(b => {
+        const c = document.createElement('div');
+        c.innerHTML = b.html;
+        return c;
+    });
+    // Têm de estar no DOM para poderem ser medidas (um elemento solto mede 0). A
+    // embalagem tem a largura exata do PDF, pelo que as alturas são as finais.
+    copiasBloco.forEach(c => embalagem.appendChild(c));
+    const alturasDeTopo = copiasBloco.map(c => Array.from(c.children).map(f => f.offsetHeight));
+    copiasBloco.forEach(c => embalagem.removeChild(c));
+
     const blocosDOM = [];
     blocos.forEach((b, idx) => {
         const d = document.createElement('div');
@@ -611,6 +627,7 @@ async function exportarDossierClinicoCompletoPDF() {
         // As imagens já estão carregadas (vêm de data URLs): basta pedir ao
         // browser que as mantenha resolvidas durante a medição e a captura.
         d.querySelectorAll('img').forEach(im => { im.decoding = 'sync'; });
+
         embalagem.appendChild(d);
         blocosDOM.push(d);
     });
@@ -618,83 +635,215 @@ async function exportarDossierClinicoCompletoPDF() {
     const topoHost = host.getBoundingClientRect().top;
     const medidas = blocosDOM.map((d, i) => {
         const r = d.getBoundingClientRect();
+        const topo = r.top - topoHost;
+        const base = r.bottom - topoHost;
+        // Pontos de corte seguro deste bloco, medidos em píxeis relativos ao topo
+        // do bloco. Cada um traz o HTML até esse ponto (parágrafos/linhas inteiras).
+        // O HTML parcial de cada corte é obtido por offsets sobre o innerHTML do
+        // bloco: percorrem-se marcadores e elementos de texto em paralelo (ambos em
+        // ordem de documento) e guarda-se a posição de cada marcador.
+        const blocosTexto = [];
+        const percorrer = (no) => {
+            for (const filho of no.childNodes) {
+                if (filho.nodeType === Node.TEXT_NODE) blocosTexto.push({ no: filho, valor: filho.nodeValue });
+                else if (filho.nodeType === Node.ELEMENT_NODE) {
+                    if (filho.hasAttribute('data-corte-seguro')) blocosTexto.push({ marca: filho });
+                    else { blocosTexto.push({ no: filho }); percorrer(filho); }
+                }
+            }
+        };
+        percorrer(d);
+        const marcasPercorridas = blocosTexto.filter(b => b.marca);
+        // Alturas acumuladas dos elementos de topo do bloco, medidas na cópia sem
+        // marcadores. Servem para reconstruir qualquer prefixo do bloco (corte a
+        // meio) sem depender de índices, porque os cortes seguros atravessam a
+        // árvore (linhas de tabela dentro de <table>).
+        const acumuladas = [];
+        let soma = 0;
+        (alturasDeTopo[i] || []).forEach(h => { soma += h; acumuladas.push(soma); });
         return {
-            topo: r.top - topoHost,
-            base: r.bottom - topoHost,
+            topo,
+            base,
             altura: r.height,
             secao: blocos[i].secao,
             html: blocos[i].html,
             alturaMaxMm: blocos[i].alturaMaxMm,
             dimensoes: blocos[i].dimensoes,
             manterJunto: blocos[i].manterJunto,
+            fimGrupo: blocos[i].fimGrupo,
+            cumulativas: acumuladas,
         };
     });
 
     // --------------------------------------------------------- paginação
-    // Cada folha é preenchida com os blocos inteiros que couberem, mas os blocos
-    // marcados com `manterJunto` formam um grupo com o bloco seguinte: o título de
-    // uma secção nunca fica no fim de uma página com a análise ou a fotografia na
-    // página seguinte. Se o grupo não couber no que resta da folha, passa inteiro
-    // para a folha seguinte. Um grupo maior do que uma folha fica sozinho e é
-    // cortado no limite (caso raro de uma tabela gigantesca).
+    // Enche folhas com blocos inteiros. Os blocos marcados com `manterJunto`
+    // formam grupo com o bloco seguinte (título + análise), pelo que um título
+    // nunca fica sozinho no fim de uma página.
+    //
+    // Nenhum bloco é cortado: se um bloco não cabe numa folha inteira (acontece
+    // com a tabela da análise de modelos em casos com muitos parâmetros), é
+    // remontado numa versão mais compacta (letra e espaçamento menores) até
+    // caber. Assim nenhuma linha da análise se perde.
     const LIMITE = PDF_GEOM.limiteAlt;
 
+    // Fronteiras explícitas: o grupo acaba quando o bloco está marcado como
+    // "último do grupo" (fimGrupo) ou quando o seguinte NÃO é um título/legenda.
+    // Sem isto, a tabela facial ficava colada ao traçado seguinte.
     const grupos = [];
     for (let i = 0; i < medidas.length; i++) {
         const inicio = i;
         let fim = i;
-        while (fim < medidas.length - 1 && medidas[fim].manterJunto) fim++;
+        while (fim < medidas.length - 1) {
+            if (medidas[fim].fimGrupo) break;
+            if (!medidas[fim].manterJunto) break;
+            fim++;
+        }
         grupos.push({ inicio, fim });
         i = fim;
     }
 
-    // Um grupo "grande" (tipicamente uma tabela de análise) ocupa mais de ~60% da
-    // folha: se começar a meio de uma página, é inevitável que se parta em duas.
-    // Nesses casos começa em página nova, para ficar inteiro.
+    // Um grupo "grande" ocupa mais de ~60% da folha: começa sempre em página nova,
+    // para não se partir em duas metades.
     const ehGrupoGrande = (gr) => (medidas[gr.fim].base - medidas[gr.inicio].topo) > LIMITE * 0.6;
 
+    // Um bloco que não cabe numa folha é, tipicamente, uma TABELA com muitas
+    // linhas (histórico de consultas, análise de modelos). Nesses casos a tabela é
+    // repartida em várias páginas por LINHAS INTEIRAS: as alturas são medidas no
+    // browser e cada página recebe as linhas que couberem. Nenhuma linha é cortada
+    // nem perdida.
+    const partirTabela = (i) => {
+        const m = medidas[i];
+        const caixa = blocosDOM[i];
+        const nomeTabela = caixa.querySelector('table');
+        if (!nomeTabela) return false;
+
+        // Esqueleto da tabela (com o cabeçalho) e corpo com as linhas a repartir
+        const esqueleto = nomeTabela.cloneNode(false);
+        const cabecalho = nomeTabela.querySelector('thead');
+        const corpo = nomeTabela.querySelector('tbody') || nomeTabela;
+        if (cabecalho) esqueleto.appendChild(cabecalho.cloneNode(true));
+        const linhas = Array.from(corpo.children);
+        if (linhas.length < 2) return false;
+
+        // Altura de cada linha, medida no contexto real da página
+        const medirLinhas = () => linhas.map(linha => {
+            const r = linha.getBoundingClientRect();
+            return r.height;
+        });
+        const alturas = medirLinhas();
+        const alturaCabecalho = cabecalho ? cabecalho.getBoundingClientRect().height : 0;
+
+        // Reparte as linhas em grupos que caibam numa folha (com o cabeçalho)
+        const DISPONIVEL = LIMITE - 24;   // folga para a moldura do bloco
+        const gruposDeLinhas = [];
+        let atual = [];
+        let usado = alturaCabecalho;
+        linhas.forEach((linha, n) => {
+            const altura = alturas[n] || 0;
+            if (atual.length && (usado + altura) > DISPONIVEL) {
+                gruposDeLinhas.push(atual);
+                atual = [];
+                usado = alturaCabecalho;
+            }
+            atual.push(linha);
+            usado += altura;
+        });
+        if (atual.length) gruposDeLinhas.push(atual);
+        if (gruposDeLinhas.length < 2) return false;
+
+        // Remove o bloco original e cria um bloco por grupo de linhas
+        embalagem.removeChild(caixa);
+        const novos = [];
+        gruposDeLinhas.forEach(grupo => {
+            const novaCaixa = document.createElement('div');
+            novaCaixa.setAttribute('data-pdf-bloco', '1');
+            novaCaixa.style.cssText = 'padding-top:12px;';
+            const tabela = esqueleto.cloneNode(true);
+            const tbody = document.createElement('tbody');
+            grupo.forEach(linha => tbody.appendChild(linha));
+            tabela.appendChild(tbody);
+            novaCaixa.appendChild(tabela);
+            embalagem.appendChild(novaCaixa);
+            novos.push(novaCaixa);
+        });
+        return novos;
+    };
+
+    // Aplica a partição a todos os blocos que não cabem, recalculando as posições
+    const repartirTabelasGrandes = () => {
+        for (let i = 0; i < blocosDOM.length; i++) {
+            if (medidas[i].altura <= LIMITE) continue;
+            const novos = partirTabela(i);
+            if (!novos) continue;
+            // Atualiza as listas paralelas (blocos, blocosDOM, imagensBloco, medidas)
+            const secaoOriginal = medidas[i].secao;
+            blocos.splice(i, 1);
+            blocosDOM.splice(i, 1);
+            imagensBloco.splice(i, 1);
+            const novasMedidas = novos.map((caixa, n) => ({
+                topo: 0, base: 0, altura: 0, secao: secaoOriginal, html: '',
+                alturaMaxMm: null, dimensoes: null, manterJunto: n < novos.length - 1,
+                cumulativas: [],
+            }));
+            novos.forEach((caixa, n) => { blocosDOM.splice(i + n, 0, caixa); imagensBloco.splice(i + n, 0, null); });
+            medidas.splice(i, 1, ...novasMedidas);
+            blocos.splice(i, 0, ...novos.map(() => ({ secao: null, html: '', manterJunto: false })));
+            i += novos.length - 1;
+        }
+        // Recalcula todas as posições depois de a lista mudar
+        const topoHost = host.getBoundingClientRect().top;
+        blocosDOM.forEach((d, k) => {
+            const r = d.getBoundingClientRect();
+            medidas[k].topo = r.top - topoHost;
+            medidas[k].base = r.bottom - topoHost;
+            medidas[k].altura = r.height;
+        });
+    };
+
+    repartirTabelasGrandes();
+
+    // Preenche folhas. `restante` é o espaço que ainda sobra na folha corrente
+    // (em píxeis) — é a única forma de o limite não "derivar" ao longo das páginas.
+    // Preenche folhas com GRUPOS INTEIROS. Um grupo que não cabe no que resta da
+    // folha passa inteiro para a folha seguinte — nunca é cortado nem truncado.
+    // (Antes, o grupo era truncado no espaço restante, o que deixava o título no
+    // fim de uma página e a tabela na seguinte.)
+    // Preenche folhas com grupos INTEIROS: junta grupos enquanto couberem e, quando
+    // um grupo não cabe no que resta, FECHA a folha antes de o colocar — assim um
+    // título nunca fica no fim de uma página com a tabela na página seguinte.
     const paginas = [];
     let g = 0;
-    let topoPagina = 0;      // topo do conteúdo já colocado na folha corrente
-    let temConteudo = false; // a folha corrente já tem blocos?
-    while (g < grupos.length) {
-        const inicioBloco = grupos[g].inicio;
-        let topo = medidas[inicioBloco].topo;
-        const alturaGrupo = medidas[grupos[g].fim].base - topo;
 
-        // Grupo grande que não cabe no que resta da folha -> começa em página nova
-        if (temConteudo && ehGrupoGrande(grupos[g]) && (topo + alturaGrupo) > (topoPagina + LIMITE)) {
-            temConteudo = false;
-            topoPagina = topo;
-        }
-
-        const limiteFolha = topoPagina + LIMITE;
-        let fimGrupo = g;
-        let fimBloco = grupos[g].fim;
-        while (fimGrupo + 1 < grupos.length && medidas[grupos[fimGrupo + 1].fim].base <= limiteFolha) {
-            fimGrupo++;
-            fimBloco = grupos[fimGrupo].fim;
-        }
-        if (medidas[fimBloco].base > limiteFolha) {
-            // Nem o primeiro grupo cabe: fica sozinho na folha
-            fimGrupo = g;
-            fimBloco = grupos[g].fim;
-        }
+    const fecharFolha = (lista) => {
+        const inicio = lista[0];
+        const fim = lista[lista.length - 1];
+        const topo = medidas[inicio].topo;
         paginas.push({
-            inicio: inicioBloco,
-            fim: fimBloco + 1,
+            inicio,
+            fim: fim + 1,
             inicioCss: topo,
-            limite: Math.min(medidas[fimBloco].base, limiteFolha),
+            limite: Math.min(medidas[fim].base, topo + LIMITE),
         });
-        topoPagina = medidas[fimBloco].base;
-        temConteudo = true;
-        g = fimGrupo + 1;
+    };
+
+    let usados = [];
+    let usado = 0;
+    while (g < grupos.length) {
+        const gr = grupos[g];
+        const altura = medidas[gr.fim].base - medidas[gr.inicio].topo;
+
+        if (usados.length && (usado + altura) > LIMITE) {
+            fecharFolha(usados);
+            usados = [];
+            usado = 0;
+        }
+        usados = usados.concat(Array.from({ length: gr.fim - gr.inicio + 1 }, (_, n) => gr.inicio + n));
+        usado += altura;
+        g++;
     }
+    if (usados.length) fecharFolha(usados);
 
     // ------------------------------------------------- construção das páginas
-    // Os blocos JÁ MEDIDOS são movidos (não recriados) para as folhas: mantêm
-    // exatamente a geometria medida, incluindo as imagens já carregadas (um
-    // innerHTML obrigaria o browser a voltar a descodificá-las).
     elemento.style.position = 'fixed';
     elemento.style.left = '-10000px';
     elemento.style.top = '0';
@@ -720,7 +869,7 @@ async function exportarDossierClinicoCompletoPDF() {
     // ------------------------------------------------------------------
     const FATOR = 2; // igual ao scale do html2canvas
 
-    async function capturarPaginaCanvas(paginaEl, alturaCss) {
+    async function capturarPaginaCanvas(paginaEl, y0, alturaCss) {
         const canvas = await html2canvas(paginaEl, {
             scale: FATOR,
             useCORS: true,
@@ -730,22 +879,25 @@ async function exportarDossierClinicoCompletoPDF() {
             width: Math.ceil(PDF_GEOM.conteudoLarg),
             windowWidth: Math.ceil(PDF_GEOM.conteudoLarg),
         });
-        const alt = Math.max(1, Math.min(canvas.height, Math.ceil(alturaCss * FATOR)));
+        const y = Math.max(0, Math.floor((y0 || 0) * FATOR));
+        const alt = Math.max(1, Math.min(canvas.height - y, Math.ceil(alturaCss * FATOR)));
         const destino = document.createElement('canvas');
         destino.width = canvas.width;
         destino.height = alt;
         const ctx = destino.getContext('2d');
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, destino.width, destino.height);
-        ctx.drawImage(canvas, 0, 0, canvas.width, alt, 0, 0, canvas.width, alt);
+        ctx.drawImage(canvas, 0, y, canvas.width, alt, 0, 0, canvas.width, alt);
         return destino.toDataURL('image/jpeg', 0.92);
     }
 
     const imagensPaginas = [];
     for (let i = 0; i < paginas.length; i++) {
         const p = paginas[i];
+        // A fatia é medida a partir do topo do primeiro bloco da folha; nos blocos
+        // que continuam de uma folha anterior há ainda o deslocamento já usado.
         const alturaCss = Math.max(1, p.limite - p.inicioCss);
-        imagensPaginas.push(await capturarPaginaCanvas(paginasDOM[i], alturaCss));
+        imagensPaginas.push(await capturarPaginaCanvas(paginasDOM[i], 0, alturaCss));
     }
     elemento.remove();
 
