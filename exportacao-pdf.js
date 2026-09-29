@@ -105,32 +105,37 @@ function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
     });
 }
 
-// Rasteriza o esquema das arcadas (SVG) para PNG, para entrar no dossier.
-// O html2pdf/html2canvas é irregular a desenhar SVG inline, por isso o SVG é
-// desenhado num canvas fora do ecrã e entra no PDF como imagem normal.
+// Rasteriza o esquema das arcadas (SVG) para JPG, para entrar no dossier.
+// O html2canvas é irregular com SVG: mesmo com largura em píxeis definida por CSS
+// (e com escala 1), desenha a imagem SVG na largura nativa do viewBox (1240 px),
+// ficando cortada à direita dentro da folha. Por isso o esquema é rasterizado
+// aqui, para um formato de mapa de bits que o html2canvas desenha à escala
+// correta. As dimensões finais (px) ficam guardadas para dimensionar a <img>.
+const ESQUEMA_ARCADAS_PX = { largura: 1300, altura: 839 }; // 1300/839 ≈ 1240/800
+
 function gerarImagemDiagramaArcadas() {
     return new Promise((resolve) => {
         try {
             let svg = svgDiagramaArcadas();
             if (!svg) return resolve(null);
             // O SVG do ecrã não traz width/height em px (senão reservava 800px de
-            // altura no painel); para rasterizar é preciso dá-las explicitamente,
-            // senão o browser usa a largura do contentor e a imagem sai pequena.
+            // altura no painel); para rasterizar é preciso dá-las explicitamente.
             svg = svg.replace(/<svg /, '<svg width="1240" height="800" ');
-            const ESCALA = 2;   // 2x para a imagem sair nítida no PDF
+            const LARG = ESQUEMA_ARCADAS_PX.largura;
+            const ALT = ESQUEMA_ARCADAS_PX.altura;
             const img = new Image();
             img.onload = function() {
                 try {
                     const c = document.createElement('canvas');
-                    c.width = img.naturalWidth || 1240;
-                    c.height = img.naturalHeight || 800;
+                    c.width = LARG;
+                    c.height = ALT;
                     const ctx2 = c.getContext('2d');
                     if (!ctx2) return resolve(null);
                     ctx2.fillStyle = '#ffffff';
                     ctx2.fillRect(0, 0, c.width, c.height);
-                    ctx2.scale(ESCALA, ESCALA);
-                    ctx2.drawImage(img, 0, 0);
-                    resolve(c.toDataURL('image/png'));
+                    // O SVG tem 1240x800 unidades: escala para preencher o canvas
+                    ctx2.drawImage(img, 0, 0, LARG, ALT);
+                    resolve(c.toDataURL('image/jpeg', 0.95));
                 } catch (e) { resolve(null); }
             };
             img.onerror = function() { resolve(null); };
@@ -359,9 +364,9 @@ async function exportarDossierClinicoCompletoPDF() {
     // Cada bloco é indivisível: é a unidade que a paginação pode mover de página,
     // por isso nenhum parágrafo, tabela ou imagem é cortado a meio.
     const blocos = [];
-    const bloco = (secao, html, alturaMaxMm) => { blocos.push({ secao: secao || null, html: html, alturaMaxMm: alturaMaxMm || null }); };
+    const bloco = (secao, html, alturaMaxMm, dimensoes) => { blocos.push({ secao: secao || null, html: html, alturaMaxMm: alturaMaxMm || null, dimensoes: dimensoes || null }); };
     const grupo = (secao, blocosDoGrupo) => {
-        blocosDoGrupo.forEach(b => blocos.push({ secao: secao, html: b.html, alturaMaxMm: b.alturaMaxMm || null }));
+        blocosDoGrupo.forEach(b => blocos.push({ secao: secao, html: b.html, alturaMaxMm: b.alturaMaxMm || null, dimensoes: b.dimensoes || null }));
     };
 
     const titulo = (texto) => `<h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:0;">${texto}</h3>`;
@@ -455,7 +460,7 @@ async function exportarDossierClinicoCompletoPDF() {
         grupo(secEsquema, [
             { html: titulo(`${secEsquema}. Esquema das Larguras Transversais`) },
             { html: paragrafo('Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.', 'font-size:9.5pt; color:#475569;') },
-            { html: `<img src="${desenhoArcadas}" style="${estiloImagemPDF(200)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 200 },
+            { html: `<img src="${desenhoArcadas}" style="display:block; margin:0 auto; object-fit:contain; border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 200, dimensoes: ESQUEMA_ARCADAS_PX },
         ]);
     }
 
@@ -522,22 +527,35 @@ async function exportarDossierClinicoCompletoPDF() {
     // As imagens têm de estar DESCODIFICADAS antes da medição: uma <img> ainda
     // por carregar mede 0×0 e colapsaria o bloco (era o que fazia desaparecer as
     // fotografias e o esquema das arcadas do dossiê).
+    // Uma entrada POR BLOCO (null quando o bloco não tem imagem): os índices têm
+    // de ficar alinhados com `blocos`, senão a imagem de um bloco seria
+    // dimensionada com as medidas de outro (era o que deixava o esquema das
+    // arcadas com a largura errada, cortado à direita).
     const imagensBloco = [];
     for (const b of blocos) {
         const m = String(b.html).match(/<img[^>]*\ssrc="([^"]*)"/i);
-        if (m) imagensBloco.push({ src: m[1], natural: await obterDimensoesImagem(m[1]), alturaMaxMm: b.alturaMaxMm || null });
+        imagensBloco.push(m ? { src: m[1], natural: await obterDimensoesImagem(m[1]) } : null);
     }
 
     // Dimensiona a <img> de um bloco pelo espaço útil da folha, a partir das
     // dimensões nativas já conhecidas (sem depender de a imagem estar carregada).
-    const dimensionarImagemDoBloco = (raiz, dimensoes, alturaMaxMm) => {
+    const dimensionarImagemDoBloco = (raiz, dimensoes, alturaMaxMm, fixas) => {
         const im = raiz.querySelector('img');
         if (!im || !dimensoes || !dimensoes.w || !dimensoes.h) return;
         const larguraMaxMm = Math.min(PDF_LARG_IMG_MM, PDF_GEOM.conteudoLarg / PDF_GEOM.MM_PX);
         const alturaMax = Math.min(alturaMaxMm || PDF_GEOM.conteudoAlt / PDF_GEOM.MM_PX, PDF_GEOM.conteudoAlt / PDF_GEOM.MM_PX);
-        let larg = larguraMaxMm;
-        let alt = larg * (dimensoes.h / dimensoes.w);
-        if (alt > alturaMax) { alt = alturaMax; larg = alt * (dimensoes.w / dimensoes.h); }
+        let larg, alt;
+        if (fixas && fixas.largura && fixas.altura) {
+            // Dimensões já resolvidas (esquema das arcadas rasterizado): usar tal e qual
+            larg = fixas.largura / PDF_GEOM.MM_PX;
+            alt = fixas.altura / PDF_GEOM.MM_PX;
+            if (larg > larguraMaxMm) { const f = larguraMaxMm / larg; larg *= f; alt *= f; }
+            if (alt > alturaMax) { const f = alturaMax / alt; larg *= f; alt *= f; }
+        } else {
+            larg = larguraMaxMm;
+            alt = larg * (dimensoes.h / dimensoes.w);
+            if (alt > alturaMax) { alt = alturaMax; larg = alt * (dimensoes.w / dimensoes.h); }
+        }
         // Em PÍXEIS e não em mm: o html2canvas captura a página num documento
         // clonado, onde as unidades absolutas (mm) são convertidas com outro
         // fator de escala e a imagem saía 1,4x maior, cortada à direita.
@@ -561,7 +579,7 @@ async function exportarDossierClinicoCompletoPDF() {
         }
         d.innerHTML = b.html;
         const info = imagensBloco[idx];
-        if (info) dimensionarImagemDoBloco(d, info.natural, b.alturaMaxMm);
+        if (info) dimensionarImagemDoBloco(d, info.natural, b.alturaMaxMm, b.dimensoes);
         if (b.secao) d.setAttribute('data-pdf-secao', String(b.secao));
         // As imagens já estão carregadas (vêm de data URLs): basta pedir ao
         // browser que as mantenha resolvidas durante a medição e a captura.
@@ -580,6 +598,7 @@ async function exportarDossierClinicoCompletoPDF() {
             secao: blocos[i].secao,
             html: blocos[i].html,
             alturaMaxMm: blocos[i].alturaMaxMm,
+            dimensoes: blocos[i].dimensoes,
         };
     });
 

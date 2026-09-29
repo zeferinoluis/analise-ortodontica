@@ -21,9 +21,11 @@
 - **Correção**: o dossiê passou a ser construído em **blocos**, medido no browser e distribuído por páginas A4 de altura fixa. As quebras caem sempre entre blocos inteiros — nunca a meio de um parágrafo, de uma linha de tabela ou de uma conclusão. Cada página é depois rasterizada e escrita diretamente no PDF pelo jsPDF.
 - **Conclusões e observações longas** deixaram de ser um bloco único: são repartidas em troços pequenos (sem partir palavras nem separar números das unidades) e cada troço é paginável.
 - **Histórico de consultas** passou de uma tabela larga (que colapsava no PDF) para blocos por consulta, com data, tipo e resumo sempre visíveis.
-- **Imagens**: as dimensões das fotografias e do esquema das arcadas são resolvidas antes da medição e fixadas em píxeis. Antes, as imagens ainda a carregar mediam 0×0 (a imagem desaparecia) e o esquema das larguras era desenhado 1,4x maior do que a folha, ficando cortado à direita.
+- **Imagens**: as dimensões das fotografias e do esquema das arcadas são resolvidas antes da medição e fixadas em píxeis. Antes, as imagens ainda a carregar mediam 0×0 (a imagem desaparecia) e o esquema das larguras era desenhado maior do que a folha, ficando cortado à direita.
+- **Esquema das larguras transversais**: era o único bloco com uma imagem SVG. O html2canvas desenha SVG na largura nativa do `viewBox` (1240 px), ignorando a largura definida por CSS, pelo que o esquema saía ampliado e cortado. O esquema passou a ser rasterizado para JPG com as dimensões finais (1300×839 px) antes de entrar no dossiê.
+- **Índice das imagens alinhado com o dos blocos**: a lista de imagens só continha blocos com imagem, pelo que a partir da primeira imagem cada bloco recebia as medidas do seguinte. Uma fotografia ficava com as dimensões de outra (e o esquema com as de uma fotografia). A lista passou a ter uma entrada por bloco (`null` quando não há imagem).
 - **Texto já com entidades HTML** (dados gravados por versões antigas, com `&#39;`) é desconvertido antes de voltar a ser escapado, para o PDF não mostrar `&#39;` em vez do apóstrofo.
-- Verificado em 11 páginas de um caso completo (cefalometria, modelos, facial frente/perfil, conclusões, 4 imagens e repositório): nenhuma página termina com conteúdo encostado ao limite inferior da folha.
+- Verificado em 12 páginas de um caso completo (cefalometria, modelos, facial frente/perfil, conclusões, 4 imagens e repositório): nenhuma página termina com conteúdo encostado ao limite inferior da folha.
 
 - Cálculo do **ângulo ANB** (SNA − SNB) e classificação esquelética (Classe I/II/III), que faltava.
 - Cálculo da **distância N-S em mm**, usando a escala real da calibração da régua (antes a calibração era feita mas nunca aplicada a nenhuma medida). Valor por omissão da escala corrigido de `1` para `null`, para não simular calibração falsa.
@@ -33,7 +35,7 @@
 - **Análise facial mais completa**: mantém os terços verticais, acrescenta ângulo nasolabial, convexidade facial do perfil mole, e proporção largura bucal/facial — com 12 marcos anatómicos faciais. (Nesta versão passou a estar dividida em frente e perfil — ver secção seguinte.)
 - O dossiê PDF agora inclui a tabela cefalométrica completa da análise escolhida e a tabela facial completa (antes só tinha os terços verticais), com numeração de secções calculada automaticamente.
 - `manifest.json` com ícones **locais** (192, 512, e uma versão *maskable* para Android), `scope` e `id` — necessários para o PWABuilder gerar um pacote Android válido.
-- `service-worker.js` guarda também em cache o `manifest.json` e os ícones. A versão de cache (`CACHE_NAME`) é agora **`ortoanalytic-cache-v13-15`** e deve ser sempre incrementada quando os ficheiros da app mudarem, para os clientes instalados (PWA/APK) substituírem a cache antiga.
+- `service-worker.js` guarda também em cache o `manifest.json` e os ícones. A versão de cache (`CACHE_NAME`) é agora **`ortoanalytic-cache-v13-16`** e deve ser sempre incrementada quando os ficheiros da app mudarem, para os clientes instalados (PWA/APK) substituírem a cache antiga.
 - Layout e estilos (`styles.css`) mantidos sem alterações.
 
 ## Nova funcionalidade: Fotométrica Facial em duas vistas (frente + perfil)
