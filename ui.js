@@ -85,14 +85,18 @@ function atualizarInterfaceEstudo() {
     atualizarBotoesUndoRedo();
     atualizarRotuloInterpretacaoSugerida();
 
+    const diagramaModelos = document.getElementById('diagrama-modelos');
+
     if (appState.tipoEstudo === 'modelos') {
         pGrafico.style.display = 'none'; btnSalvarGrafico.style.display = 'none';
         viewportGrafico.style.display = 'none'; pModelos.style.display = 'block';
         if (grupoSubVista) grupoSubVista.style.display = 'none';
         if (rotuloUpload) rotuloUpload.style.display = 'none';
         tabelaHeader.innerHTML = '<tr><th>Análise de Modelo</th><th>Medido</th><th>Norma</th><th>Status</th></tr>';
+        if (diagramaModelos) diagramaModelos.style.display = 'block';
         executarCalculosModelosPuros();
     } else {
+        if (diagramaModelos) { diagramaModelos.style.display = 'none'; diagramaModelos.innerHTML = ''; }
         pGrafico.style.display = 'block'; btnSalvarGrafico.style.display = 'block';
         viewportGrafico.style.display = 'flex'; pModelos.style.display = 'none';
         tabelaHeader.innerHTML = '<tr><th>Parâmetro</th><th>Medido</th><th>Norma</th><th>Status</th></tr>';
@@ -108,6 +112,12 @@ function atualizarInterfaceEstudo() {
 
         const grupoAnalise = document.getElementById('grupo-tipo-analise-cefalo');
         if (grupoAnalise) grupoAnalise.style.display = (appState.tipoEstudo === 'cefalometria') ? 'block' : 'none';
+
+        // A caixa dos planos de referência só faz sentido na cefalometria
+        const grupoPlanos = document.getElementById('grupo-planos-referencia');
+        const caixaPlanos = document.getElementById('chk-planos-referencia');
+        if (grupoPlanos) grupoPlanos.style.display = (appState.tipoEstudo === 'cefalometria') ? 'flex' : 'none';
+        if (caixaPlanos) caixaPlanos.checked = !!appState.mostrarPlanosReferencia;
 
         carregarEstudoAtivoNoCanvas();
     }

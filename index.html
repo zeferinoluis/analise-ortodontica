@@ -127,6 +127,12 @@
                                 <option value="todas">Todas as Análises</option>
                             </select>
                         </div>
+                        <div class="form-group" id="grupo-planos-referencia" style="margin-top:12px; margin-bottom:6px; display:flex; align-items:center; gap:8px; background:#f0fdfa; border:1px solid #99f6e4; border-radius:6px; padding:8px 10px;">
+                            <input type="checkbox" id="chk-planos-referencia" checked onchange="alternarPlanosReferencia()" style="width:auto; margin:0;">
+                            <label for="chk-planos-referencia" style="margin:0; color:#0f766e; font-weight:bold; cursor:pointer;">Planos de referência</label>
+                        </div>
+                        <p style="font-size:0.72rem; color:#475569; margin:0 0 10px;">Mostra os planos SN, de Frankfort e mandibular, as linhas NA/NB e os eixos dos incisivos, com os ângulos SNA, SNB, SN-GoGn e IMPA assinalados no traçado.</p>
+
                         <h4 style="margin-top:15px;">Marcos Anatómicos</h4>
                         <div id="lista-pontos-dinamica"></div>
                         <div id="descricao-ponto-ativo" class="descricao-ponto">Selecione ou passe o rato sobre um marco para ver a descrição.</div>
@@ -178,6 +184,9 @@
                             <tbody id="results-tbody"></tbody>
                         </table>
                     </div>
+
+                    <!-- Esquema gráfico das larguras transversais (preenchido no módulo de modelos) -->
+                    <div id="diagrama-modelos" style="display:none;"></div>
 
                     <h3 style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                         Registo de Anomalias

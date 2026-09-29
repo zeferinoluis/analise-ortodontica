@@ -214,6 +214,103 @@ function executarCalculosModelosPuros() {
     renderizarResultadosModelos();
 }
 
+// ==========================================================================
+// DIAGRAMA DE ARCADE — esquema gráfico (SVG) das larguras transversais
+// Compara, em cada arcada, a largura medida com a largura PREVISTA por
+// Korkhaus (superior) / Pont (inferior), para se ver de imediato onde falta
+// ou sobra espaço transversal. Não é uma projeção à escala dos modelos: o
+// esquema é normalizado a partir do perímetro e das larguras introduzidas.
+// ==========================================================================
+function gerarDiagramaArcadas(r) {
+    const d = r.dados;
+    const LARG = 1240, ALT = 800;
+    const ESCALA = 4.5;   // px por mm (nos dois eixos — o esquema é proporcional)
+    const CX = LARG / 2;
+
+    // Contorno do arco: segmento circular com a corda na largura inter-molar.
+    // Os incisivos ficam no vértice (linha média) e os molares nas extremidades.
+    // Devolve o caminho SVG e a profundidade máxima do arco, em mm.
+    function curvaArco(larguraMolar) {
+        const meia = larguraMolar / 2;
+        const raio = meia / 0.85;                       // arco com ~72% do semicírculo
+        const meiaCorda = meia;
+        const sagita = raio - Math.sqrt(raio * raio - meiaCorda * meiaCorda);
+        const abertura = Math.asin(meiaCorda / raio);   // meia-abertura do arco
+        const passos = 60;
+        let caminho = '';
+        for (let i = 0; i <= passos; i++) {
+            const ang = -abertura + (2 * abertura * i) / passos;
+            const x = CX + raio * Math.sin(ang) * ESCALA;
+            const y = (raio * (Math.cos(ang) - Math.cos(abertura))) * ESCALA;
+            caminho += (i ? ' L ' : 'M ') + x.toFixed(1) + ' ' + y.toFixed(1);
+        }
+        return { caminho, profundidadeMax: sagita };
+    }
+
+    const texto = (x, y, conteudo, cor, tamanho, anchor) =>
+        `<text x="${Math.round(x)}" y="${Math.round(y)}" fill="${cor}" font-size="${tamanho || 22}" font-family="Arial, sans-serif"${anchor ? ` text-anchor="${anchor}"` : ''}>${conteudo}</text>`;
+
+    // Linha de medida com marcas nas extremidades e valor por cima da linha
+    function linhaLargura(x1, x2, y, cor, rotulo, tracejada) {
+        const marca = 9;
+        const y1 = Math.round(y), e1 = Math.round(x1), e2 = Math.round(x2);
+        return `<line x1="${e1}" y1="${y1}" x2="${e2}" y2="${y1}" stroke="${cor}" stroke-width="3"${tracejada ? ' stroke-dasharray="12,8"' : ''}/>` +
+            `<line x1="${e1}" y1="${y1 - marca}" x2="${e1}" y2="${y1 + marca}" stroke="${cor}" stroke-width="3"/>` +
+            `<line x1="${e2}" y1="${y1 - marca}" x2="${e2}" y2="${y1 + marca}" stroke="${cor}" stroke-width="3"/>` +
+            texto((e1 + e2) / 2, y1 - 13, rotulo, cor, 23, 'middle');
+    }
+
+    function desenharArcada(origemY, nome, larguraPm, larguraM, previstoPm, previstoM, cor) {
+        const curva = curvaArco(larguraM);
+        // Extremos (esquerdo e direito) de uma largura, simétricos em relação a CX
+        const extremos = (largura) => [CX - (largura / 2) * ESCALA, CX + (largura / 2) * ESCALA];
+        const yPm = Math.round(curva.profundidadeMax * ESCALA);
+        const yM = Math.round(curva.profundidadeMax * ESCALA);
+        // As linhas de medida ficam ABAIXO do arco (não por cima dele), para não
+        // cruzarem a curva nem os rótulos
+        const linhaPm = yPm + 40, linhaPmPrev = yPm + 78;
+        const linhaM = yM + 126, linhaMPrev = yM + 164;
+        let svg = `<g transform="translate(0, ${origemY})">`;
+        // Eixo da linha média, para se perceber a simetria do esquema
+        svg += `<line x1="${CX}" y1="0" x2="${CX}" y2="${linhaM + 12}" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="10,8"/>`;
+        // Contorno do arco (incisivos na linha média, molares nas extremidades)
+        svg += `<path d="${curva.caminho}" fill="none" stroke="${cor}" stroke-width="6" stroke-linejoin="round"/>`;
+        // Larguras: medidas (cheias, destacadas) e previstas (tracejadas, a cinzento)
+        svg += linhaLargura.apply(null, extremos(larguraPm).concat([linhaPm, cor, 'medido ' + larguraPm.toFixed(1) + ' mm', false]));
+        svg += linhaLargura.apply(null, extremos(previstoPm).concat([linhaPmPrev, '#94a3b8', 'previsto ' + previstoPm.toFixed(1) + ' mm', true]));
+        svg += linhaLargura.apply(null, extremos(larguraM).concat([linhaM, cor, 'medido ' + larguraM.toFixed(1) + ' mm', false]));
+        svg += linhaLargura.apply(null, extremos(previstoM).concat([linhaMPrev, '#94a3b8', 'previsto ' + previstoM.toFixed(1) + ' mm', true]));
+        // Nome da arcada por cima do arco
+        svg += texto(CX, -26, nome, '#0f172a', 28, 'middle');
+        svg += '</g>';
+        return svg;
+    }
+
+    const diferenca = (largura, previsto) => largura - previsto;
+    const dPmSup = diferenca(d.dPmSup, r.korkhausPm), dMSup = diferenca(d.dMSup, r.korkhausM);
+    const dPmInf = diferenca(d.dPmInf, r.pontPmInf), dMInf = diferenca(d.dMInf, r.pontMInf);
+    const resumoLargura = (rotulo, valor) => `${rotulo}: ${valor > 0 ? '+' : ''}${valor.toFixed(1)} mm`;
+
+    // width/height explícitos (para além do viewBox): sem eles o rasterizador não
+    // sabe que dimensões dar à imagem ao desenhar o SVG num canvas
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LARG} ${ALT}" width="${LARG}" height="${ALT}" style="max-width:760px; display:block; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px;" role="img" aria-label="Esquema das larguras transversais das arcadas">` +
+        desenharArcada(150, 'ARCADA SUPERIOR — larguras previstas por Korkhaus', d.dPmSup, d.dMSup, r.korkhausPm, r.korkhausM, '#0284c7') +
+        desenharArcada(470, 'ARCADA INFERIOR — larguras previstas pelo índice de Pont', d.dPmInf, d.dMInf, r.pontPmInf, r.pontMInf, '#7c3aed') +
+        `</svg>`;
+
+    const legenda = `<div style="font-size:0.75rem; color:#475569; margin-top:6px;">Diferença para o previsto — ${resumoLargura('PM sup.', dPmSup)}, ${resumoLargura('M sup.', dMSup)}, ${resumoLargura('PM inf.', dPmInf)}, ${resumoLargura('M inf.', dMInf)}. Esquema proporcional às larguras introduzidas, mas normalizado no comprimento do arco: não substitui a medição sobre os modelos.</div>`;
+
+    return `<div style="margin-top:14px;"><div style="font-size:0.82rem; font-weight:bold; color:#0284c7; margin-bottom:6px;">Esquema das Larguras Transversais</div>${svg}${legenda}</div>`;
+}
+
+// Devolve só o SVG do esquema (sem moldura), para ser rasterizado no dossier PDF
+function svgDiagramaArcadas(m) {
+    const html = gerarDiagramaArcadas(m || calcularMetricasModelos(appState.dadosModelosBackup));
+    const inicio = html.indexOf('<svg');
+    const fim = html.indexOf('</svg>') + 6;
+    return inicio >= 0 ? html.slice(inicio, fim) : '';
+}
+
 function renderizarResultadosModelos() {
     const { linhas, invalidos, avisos } = calcularResultadosModelos();
     let html = renderizarTabelaResultados(linhas, 'Preencha os dados dos modelos.');
@@ -224,6 +321,10 @@ function renderizarResultadosModelos() {
         html += `<tr><td colspan="4" style="background:#fffbeb; color:#92400e; font-size:0.8rem;"><strong>Verificar antes de concluir:</strong><br>${avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}</td></tr>`;
     }
     document.getElementById('results-tbody').innerHTML = html;
+
+    // Esquema gráfico das larguras transversais (só no módulo de modelos)
+    const alvo = document.getElementById('diagrama-modelos');
+    if (alvo) alvo.innerHTML = gerarDiagramaArcadas(calcularMetricasModelos(lerDadosModelos().dados));
 }
 
 // Guarda os dados dos modelos no estado (e usa-os como base dos cálculos seguintes)

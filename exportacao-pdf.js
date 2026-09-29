@@ -75,6 +75,12 @@ function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
 
             desenharLinhasEstudoNoCtx(dados, chaveEstudo, vCtx);
 
+            // Planos de referência cefalométricos (quando o clínico os tem ligados):
+            // no PDF não se repetem os valores dos ângulos, só as linhas + legenda.
+            if (chaveEstudo === 'cefalometria' && appState.mostrarPlanosReferencia) {
+                desenharPlanosReferencia((k) => dados.pontos[k] ? { x: dados.pontos[k].x, y: dados.pontos[k].y } : null, dados, vCtx, false);
+            }
+
             for (let k in p) {
                 if (p[k]) {
                     vCtx.beginPath(); vCtx.arc(p[k].x, p[k].y, Math.max(6, nw/140), 0, 2*Math.PI);
@@ -89,6 +95,36 @@ function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
         };
         imgBase.onerror = function() { resolve(""); };
         imgBase.src = dados.src;
+    });
+}
+
+// Rasteriza o esquema das arcadas (SVG) para PNG, para entrar no dossier.
+// O html2pdf/html2canvas é irregular a desenhar SVG inline, por isso o SVG é
+// desenhado num canvas fora do ecrã e entra no PDF como imagem normal.
+function gerarImagemDiagramaArcadas() {
+    return new Promise((resolve) => {
+        try {
+            const svg = svgDiagramaArcadas();
+            if (!svg) return resolve(null);
+            const ESCALA = 2;   // 2x para a imagem sair nítida no PDF
+            const img = new Image();
+            img.onload = function() {
+                try {
+                    const c = document.createElement('canvas');
+                    c.width = img.naturalWidth || 1240;
+                    c.height = img.naturalHeight || 800;
+                    const ctx2 = c.getContext('2d');
+                    if (!ctx2) return resolve(null);
+                    ctx2.fillStyle = '#ffffff';
+                    ctx2.fillRect(0, 0, c.width, c.height);
+                    ctx2.scale(ESCALA, ESCALA);
+                    ctx2.drawImage(img, 0, 0);
+                    resolve(c.toDataURL('image/png'));
+                } catch (e) { resolve(null); }
+            };
+            img.onerror = function() { resolve(null); };
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        } catch (e) { resolve(null); }
     });
 }
 
@@ -187,6 +223,7 @@ async function exportarDossierClinicoCompletoPDF() {
 
     // Métricas de modelos: mesma função usada no ecrã (nunca fórmulas duplicadas)
     const resultadosModelos = calcularResultadosModelos();
+    const desenhoArcadas = appState.modelosRegistados ? await gerarImagemDiagramaArcadas() : null;
 
     const tipoAnaliseSelect = document.getElementById('tipo-analise-cefalo');
     const tipoAnaliseAtual = tipoAnaliseSelect ? tipoAnaliseSelect.value : 'steiner';
@@ -286,6 +323,22 @@ async function exportarDossierClinicoCompletoPDF() {
         blocoModelos = `<p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:20px;">Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)</p>`;
     }
 
+    // PÁGINA DO ESQUEMA DAS LARGURAS TRANSVERSAIS (a seguir aos resultados de modelos)
+    let blocoDiagrama = '';
+    if (desenhoArcadas) {
+        // Dimensões REAIS da imagem rasterizada (2x), para o cálculo do estilo
+        // usar a proporção verdadeira do esquema
+        const dimD = await obterDimensoesImagem(desenhoArcadas);
+        const estiloD = estiloImgSeguro(dimD.w, dimD.h, 176, 210);
+        blocoDiagrama = `
+            <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Esquema das Larguras Transversais</h3>
+                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.</span>
+                <img src="${desenhoArcadas}" style="${estiloD} border:1px solid #cbd5e1; border-radius:4px;">
+            </div>
+        `;
+    }
+
     // Bloco de resultados faciais de uma vista (cabeçalho + tabela), reutilizado para frente e perfil
     function blocoResultadosFacialPDF(titulo, subtitulo, linhas) {
         return `
@@ -318,6 +371,8 @@ async function exportarDossierClinicoCompletoPDF() {
         </div>
     `;
 
+    pdfHtml += blocoDiagrama;
+
     // PÁGINA DEDICADA EXCLUSIVA PARA A CEFALOMETRIA
     if (cefaloImgData) {
         let dimC = await obterDimensoesImagem(cefaloImgData);
@@ -325,7 +380,7 @@ async function exportarDossierClinicoCompletoPDF() {
         pdfHtml += `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
                 <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. Cefalometria Radiográfica Computadorizada</h3>
-                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia.</span>
+                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).</span>
                 <img src="${cefaloImgData}" style="${estiloC} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
         `;

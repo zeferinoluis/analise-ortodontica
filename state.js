@@ -21,6 +21,7 @@ function estudoFacialPorOmissao(pontos) {
 let appState = {
     tipoEstudo: 'cefalometria',
     subVistaFacial: 'frente', // 'frente' | 'perfil' — sub-vista ativa dentro do módulo Fotométrica Facial
+    mostrarPlanosReferencia: true, // planos/eixos de referência sobrepostos ao traçado cefalométrico
     estudosImagens: {
         cefalometria: { pontos: { S: null, N: null, A: null, B: null, Pg: null, Me: null, Gn: null, Go: null, Or: null, Po: null, ENA: null, ENP: null, U1i: null, U1a: null, L1i: null, L1a: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 },
         facialFrente: estudoFacialPorOmissao(pontosFacialFrentePorOmissao()),
@@ -100,6 +101,7 @@ function appStatePorOmissao() {
     return {
         tipoEstudo: 'cefalometria',
         subVistaFacial: 'frente',
+        mostrarPlanosReferencia: true,
         estudosImagens: {
             cefalometria: { pontos: { S: null, N: null, A: null, B: null, Pg: null, Me: null, Gn: null, Go: null, Or: null, Po: null, ENA: null, ENP: null, U1i: null, U1a: null, L1i: null, L1a: null }, escalaVisual: 1, scalePxPerMm: null, src: "", naturalWidth: 0, naturalHeight: 0 },
             facialFrente: estudoFacialPorOmissao(pontosFacialFrentePorOmissao()),
@@ -152,6 +154,9 @@ function normalizarAppState(carregado) {
     const resultado = base;
     resultado.tipoEstudo = ['cefalometria','facial','modelos'].includes(carregado.tipoEstudo) ? carregado.tipoEstudo : 'cefalometria';
     resultado.subVistaFacial = carregado.subVistaFacial === 'perfil' ? 'perfil' : 'frente';
+    // Fichas antigas/prévias: se o campo não existir, mantém-se ligado (melhor para
+    // quem está a começar); se o clínico o tiver desligado, a escolha é preservada.
+    resultado.mostrarPlanosReferencia = carregado.mostrarPlanosReferencia !== false;
     resultado.historicoConsultas = Array.isArray(carregado.historicoConsultas) ? carregado.historicoConsultas : [];
     resultado.imagensPaciente = (carregado.imagensPaciente && typeof carregado.imagensPaciente === 'object') ? carregado.imagensPaciente : {};
     resultado.dadosModelosBackup = migrarModelosPorOmissao(carregado.dadosModelosBackup);

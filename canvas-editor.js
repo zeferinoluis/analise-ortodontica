@@ -200,10 +200,193 @@ canvas.addEventListener('pointerleave', function() {
 });
 
 function drawLine(p1, p2, color, targetCtx = ctx) { targetCtx.beginPath(); targetCtx.moveTo(p1.x, p1.y); targetCtx.lineTo(p2.x, p2.y); targetCtx.strokeStyle = color; targetCtx.lineWidth = 4; targetCtx.stroke(); }
+
+// ==========================================================================
+// PLANOS DE REFERÊNCIA CEFALOMÉTRICOS — sobrepostos ao traçado para que o clínico
+// veja exatamente as linhas a partir das quais cada ângulo é medido.
+// Ativa-se/desativa-se com a caixa "Planos de referência" no painel lateral.
+//   SN (azul)                    → base de Steiner (SNA, SNB, SN-GoGn)
+//   Plano de Frankfort Or–Po (verde-azul) → base de Downs e Tweed
+//   Plano mandibular Go–Gn (laranja)→ SN-GoGn, FMA, IMPA
+//   Linha NA (verde) / NB (vermelha) → U1-NA / L1-NB (linhas de referência)
+//   Eixo do incisivo (ciano tracejado) → U1-NA, L1-NB, FMIA, IMPA
+//   Linha S-Gn (violeta tracejado) → eixo Y de Downs
+//   Linha N-Pg (rosa tracejado)    → ângulo facial e convexidade
+// ==========================================================================
+const PLANOS_REFERENCIA = [
+    { id: 'sn', rotulo: 'SN (Sela-Násio)', cor: '#0284c7', pontos: ['S', 'N'], tracejado: false },
+    { id: 'fh', rotulo: 'Frankfort (Or-Po)', cor: '#0d9488', pontos: ['Or', 'Po'], tracejado: false },
+    { id: 'mp', rotulo: 'Plano mandibular (Go-Gn)', cor: '#ea580c', pontos: ['Go', 'Gn'], tracejado: false },
+    { id: 'na', rotulo: 'NA', cor: '#16a34a', pontos: ['N', 'A'], tracejado: true },
+    { id: 'nb', rotulo: 'NB', cor: '#e11d48', pontos: ['N', 'B'], tracejado: true },
+    { id: 'sgn', rotulo: 'S-Gn (eixo Y)', cor: '#7c3aed', pontos: ['S', 'Gn'], tracejado: true },
+    { id: 'npg', rotulo: 'N-Pg (plano facial)', cor: '#db2777', pontos: ['N', 'Pg'], tracejado: true }
+];
+
+function alternarPlanosReferencia() {
+    appState.mostrarPlanosReferencia = !appState.mostrarPlanosReferencia;
+    const caixa = document.getElementById('chk-planos-referencia');
+    if (caixa) caixa.checked = appState.mostrarPlanosReferencia;
+    redrawCanvas();
+}
+
+// Estende a linha entre dois pontos para além de ambos (usado nos planos e eixos)
+function estenderLinha(p1, p2, margem) {
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const norma = Math.hypot(dx, dy) || 1;
+    const ux = dx / norma, uy = dy / norma;
+    return [
+        { x: p1.x - ux * margem, y: p1.y - uy * margem },
+        { x: p2.x + ux * margem, y: p2.y + uy * margem }
+    ];
+}
+
+// Alguns contextos 2D mínimos (ou ambientes de teste) não expõem save/restore;
+// a proteção evita que uma falha aí impeça o desenho do resto do traçado.
+function guardarEstadoCtx(c) { if (c && typeof c.save === 'function') c.save(); }
+function restaurarEstadoCtx(c) { if (c && typeof c.restore === 'function') c.restore(); }
+function usarTracejado(c, padrao) { if (c && typeof c.setLineDash === 'function') c.setLineDash(padrao); }
+function molduraCtx(c, x, y, l, a) { if (c && typeof c.strokeRect === 'function') c.strokeRect(x, y, l, a); }
+function larguraTextoCtx(c, texto, alternativa) {
+    if (c && typeof c.measureText === 'function') { const m = c.measureText(texto); if (m && typeof m.width === 'number') return m.width; }
+    return String(texto).length * alternativa;
+}
+
+function desenharLinhaGuia(p1, p2, cor, tracejado, largura, ctxAlvo) {
+    const c = ctxAlvo || ctx;
+    guardarEstadoCtx(c);
+    c.beginPath();
+    usarTracejado(c, tracejado ? [12, 8] : []);
+    c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y);
+    c.strokeStyle = cor; c.lineWidth = largura; c.stroke();
+    restaurarEstadoCtx(c);
+}
+
+// Etiqueta com fundo claro, sempre dentro do canvas (para os planos ficarem identificáveis)
+function desenharEtiqueta(texto, x, y, cor, ctxAlvo) {
+    const c = ctxAlvo || ctx;
+    guardarEstadoCtx(c);
+    c.font = 'bold 15px sans-serif';
+    const largura = larguraTextoCtx(c, texto, 8) + 10;
+    const altura = 20;
+    let px = x, py = y;
+    if (px + largura > canvas.width) px = canvas.width - largura - 2;
+    if (px < 2) px = 2;
+    if (py - altura < 2) py = altura + 2;
+    if (py > canvas.height - 2) py = canvas.height - 2;
+    c.fillStyle = 'rgba(255,255,255,0.82)';
+    c.fillRect(px, py - altura, largura, altura);
+    c.fillStyle = cor;
+    c.textBaseline = 'alphabetic';
+    c.fillText(texto, px + 5, py - 5);
+    restaurarEstadoCtx(c);
+}
+
+function desenharLegendaPlanos(linhas, ctxAlvo) {
+    const c = ctxAlvo || ctx;
+    const itens = linhas.filter(l => l.disponivel);
+    if (!itens.length) return;
+    const largura = 300, alturaLinha = 20, altura = itens.length * alturaLinha + 12;
+    c.save();
+    c.fillStyle = 'rgba(255,255,255,0.85)';
+    c.fillRect(6, 6, largura, altura);
+    c.strokeStyle = '#94a3b8'; c.lineWidth = 1;
+    molduraCtx(c, 6, 6, largura, altura);
+    c.font = 'bold 13px sans-serif';
+    itens.forEach((item, i) => {
+        const y = 6 + 12 + i * alturaLinha;
+        c.beginPath();
+        usarTracejado(c, item.tracejado ? [6, 4] : []);
+        c.moveTo(14, y); c.lineTo(52, y);
+        c.strokeStyle = item.cor; c.lineWidth = 4; c.stroke();
+        usarTracejado(c, []);
+        c.fillStyle = '#0f172a';
+        c.fillText(item.rotulo, 60, y + 5);
+    });
+    restaurarEstadoCtx(c);
+}
+
+// Desenha, no contexto indicado, os planos/eixos e os arcos dos ângulos principais.
+// Usado tanto no canvas do ecrã como no canvas virtual do PDF.
+function desenharPlanosReferencia(v, cEstudo, ctxAlvo, comRotulos) {
+    const rotular = comRotulos !== false;
+    const c = ctxAlvo || ctx;
+    const pts = cEstudo.pontos;
+    const temTodos = (...ids) => ids.every(id => !!pts[id]);
+    const L = (k) => v(k);
+
+    // 1) Planos e linhas de referência, estendidos para lá dos pontos que os definem
+    const linhas = PLANOS_REFERENCIA.map(plano => Object.assign({}, plano, {
+        disponivel: temTodos.apply(null, plano.pontos),
+        a: temTodos.apply(null, plano.pontos) ? L(plano.pontos[0]) : null,
+        b: temTodos.apply(null, plano.pontos) ? L(plano.pontos[1]) : null
+    }));
+    linhas.forEach(l => {
+        if (!l.disponivel) return;
+        const [a, b] = estenderLinha(l.a, l.b, 45);
+        desenharLinhaGuia(a, b, l.cor, l.tracejado, 2.5, c);
+    });
+
+    // 2) Eixos dos incisivos, estendidos em ambos os sentidos
+    ['U1', 'L1'].forEach(pref => {
+        if (!temTodos(pref + 'a', pref + 'i')) return;
+        const [a, b] = estenderLinha(L(pref + 'a'), L(pref + 'i'), 40);
+        desenharLinhaGuia(a, b, '#0891b2', true, 3, c);
+    });
+
+    // 3) Arcos dos ângulos principais (com o valor medido por perto)
+    const arcoAngulo = (vertice, p1, p2, raio, cor, rotulo) => {
+        const a1 = Math.atan2(p1.y - vertice.y, p1.x - vertice.x);
+        const a2 = Math.atan2(p2.y - vertice.y, p2.x - vertice.x);
+        let delta = a2 - a1;
+        while (delta > Math.PI) delta -= 2 * Math.PI;
+        while (delta < -Math.PI) delta += 2 * Math.PI;
+        guardarEstadoCtx(c);
+        c.beginPath();
+        c.arc(vertice.x, vertice.y, raio, a1, a1 + delta, delta < 0);
+        c.strokeStyle = cor; c.lineWidth = 3; c.stroke();
+        restaurarEstadoCtx(c);
+        const meio = a1 + delta / 2;
+        desenharEtiqueta(rotulo, vertice.x + Math.cos(meio) * (raio + 10) - 18, vertice.y + Math.sin(meio) * (raio + 10) + 6, cor, c);
+    };
+
+    if (rotular) {
+    if (temTodos('S', 'N', 'A')) arcoAngulo(L('N'), L('S'), L('A'), 62, '#0284c7', 'SNA ' + obterAngulo(pts.S, pts.N, pts.A).toFixed(1) + '°');
+    if (temTodos('S', 'N', 'B')) arcoAngulo(L('N'), L('S'), L('B'), 78, '#e11d48', 'SNB ' + obterAngulo(pts.S, pts.N, pts.B).toFixed(1) + '°');
+    if (temTodos('S', 'N', 'Go', 'Gn')) {
+        arcoAngulo(L('Go'), L('S'), L('Gn'), 60, '#ea580c', 'SN-GoGn ' + anguloEntreLinhas(pts.S, pts.N, pts.Go, pts.Gn).toFixed(1) + '°');
+    }
+    if (temTodos('Go', 'Gn', 'L1i', 'L1a')) {
+        const impa = anguloImpa(pts.L1a, pts.L1i, pts.Go, pts.Gn);
+        if (impa !== null) arcoAngulo(L('L1i'), L('Go'), L('L1a'), 52, '#0f766e', 'IMPA ' + impa.toFixed(1) + '°');
+    }
+    }
+
+    // 4) Perpendicular ao plano mandibular no bordo incisal inferior:
+    //    é a partir dela que o IMPA é contado (90° = incisivo perpendicular)
+    if (temTodos('Go', 'Gn', 'L1i')) {
+        const angPlano = Math.atan2(pts.Gn.y - pts.Go.y, pts.Gn.x - pts.Go.x);
+        const perp = { x: pts.L1i.x + Math.cos(angPlano - Math.PI / 2) * 60, y: pts.L1i.y + Math.sin(angPlano - Math.PI / 2) * 60 };
+        desenharLinhaGuia({ x: pts.L1i.x * cEstudo.escalaVisual, y: pts.L1i.y * cEstudo.escalaVisual },
+            { x: perp.x * cEstudo.escalaVisual, y: perp.y * cEstudo.escalaVisual },
+            '#0f766e', true, 2, c);
+    }
+
+    // 5) Legenda das linhas desenhadas
+    desenharLegendaPlanos(linhas, c);
+}
+
 function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     let cEstudo = appState.estudosImagens[chaveEstudoAtual()];
-    
+    const v = (k) => cEstudo.pontos[k] ? { x: cEstudo.pontos[k].x*cEstudo.escalaVisual, y: cEstudo.pontos[k].y*cEstudo.escalaVisual } : null;
+
+    // Os planos de referência são desenhados primeiro, para ficarem por baixo dos
+    // marcos e das linhas do traçado (e não esconderem os pontos anatómicos).
+    if (appState.tipoEstudo === 'cefalometria' && appState.mostrarPlanosReferencia) {
+        desenharPlanosReferencia(v, cEstudo, ctx);
+    }
+
     for (let p in cEstudo.pontos) {
         if (cEstudo.pontos[p]) {
             let vx = cEstudo.pontos[p].x * cEstudo.escalaVisual;
@@ -214,7 +397,6 @@ function redrawCanvas() {
             ctx.fillText(p, vx + 8, vy - 5);
         }
     }
-    const v = (k) => cEstudo.pontos[k] ? { x: cEstudo.pontos[k].x*cEstudo.escalaVisual, y: cEstudo.pontos[k].y*cEstudo.escalaVisual } : null;
     if (appState.tipoEstudo === 'cefalometria') {
         let pts = cEstudo.pontos;
         if(pts.S && pts.N) drawLine(v('S'), v('N'), '#0284c7');
@@ -251,6 +433,18 @@ function redrawCanvas() {
             if (pts.PgL && pts.Me) drawLine(v('PgL'), v('Me'), '#e11d48');
             if (pts.Me && pts.C) drawLine(v('Me'), v('C'), '#94a3b8');
             if (pts.Gl && pts.PgL) drawLine(v('Gl'), v('PgL'), '#7c3aed');
+
+            // Linhas de referência da análise do perfil mole: horizontal pela glabela
+            // (base do ângulo nasolabial e da convexidade, que são medidos em relação
+            // à horizontal) e vertical pelo subnasal (referência de projeção labial).
+            if (pts.Gl) {
+                const gl = v('Gl');
+                desenharLinhaGuia({ x: 0, y: gl.y }, { x: canvas.width, y: gl.y }, '#0ea5e9', true, 2, ctx);
+            }
+            if (pts.Sn) {
+                const sn = v('Sn');
+                desenharLinhaGuia({ x: sn.x, y: 0 }, { x: sn.x, y: canvas.height }, '#94a3b8', true, 2, ctx);
+            }
         }
         calcularAnaliseFacial();
     }

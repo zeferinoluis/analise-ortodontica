@@ -23,7 +23,7 @@
 - **Análise facial mais completa**: mantém os terços verticais, acrescenta ângulo nasolabial, convexidade facial do perfil mole, e proporção largura bucal/facial — com 12 marcos anatómicos faciais. (Nesta versão passou a estar dividida em frente e perfil — ver secção seguinte.)
 - O dossiê PDF agora inclui a tabela cefalométrica completa da análise escolhida e a tabela facial completa (antes só tinha os terços verticais), com numeração de secções calculada automaticamente.
 - `manifest.json` com ícones **locais** (192, 512, e uma versão *maskable* para Android), `scope` e `id` — necessários para o PWABuilder gerar um pacote Android válido.
-- `service-worker.js` agora também guarda em cache o `manifest.json` e os ícones, e a versão de cache foi incrementada.
+- `service-worker.js` guarda também em cache o `manifest.json` e os ícones. A versão de cache (`CACHE_NAME`) é agora **`ortoanalytic-cache-v13-13`** e deve ser sempre incrementada quando os ficheiros da app mudarem, para os clientes instalados (PWA/APK) substituírem a cache antiga.
 - Layout e estilos (`styles.css`) mantidos sem alterações.
 
 ## Nova funcionalidade: Fotométrica Facial em duas vistas (frente + perfil)
@@ -43,6 +43,22 @@
 - **U1–NA e L1–NB angulares** passaram a ser devolvidos como magnitude (0–90°) com a indicação explícita de que a direção (protrusão/retrusão) se lê nas medidas **lineares** correspondentes — que exigem a calibração da régua e aparecem assinaladas quando ela não existe.
 - **Planos de referência por análise**, agora indicados no ecrã e no PDF: Steiner → plano SN; Downs → plano de Frankfort (Or–Po); Tweed → FH + plano mandibular.
 - Acrescentado o **controlo do triângulo de Tweed** (FMA + FMIA + IMPA = 180°) e a **proporção de alturas faciais posterior/anterior** (S-Go / N-Me).
+
+### Esquema das arcadas na análise de modelos
+- Como o módulo de modelos é preenchido por formulário (não tem canvas), foi acrescentado ao painel de resultados um **esquema gráfico das larguras transversais**, desenhado em SVG.
+- Para cada arcada mostra o **contorno do arco** (segmento circular, com os incisivos na linha média e os molares nas extremidades) e, por baixo, as **quatro larguras**: inter-pré-molar e inter-molar medidas (linha cheia, na cor da arcada) e as previstas por **Korkhaus** (superior) e **Pont** (inferior), a tracejado. O esquema é proporcional às larguras introduzidas, para se ver de imediato onde falta ou sobra espaço transversal.
+- Abaixo do esquema, a legenda indica a **diferença em mm** entre medido e previsto em cada uma das quatro medidas.
+- O esquema entra também no **dossiê PDF**, em página própria, a seguir aos resultados de modelos. Como o html2canvas é irregular a desenhar SVG inline, o esquema é **rasterizado para PNG** (a 2x, para sair nítido) antes de ser embutido, com a proporção real preservada dentro da área útil do A4.
+
+### Linhas de referência na fotometria de perfil
+- No traçado da fotografia de perfil passou a figurar uma **linha horizontal pela glabela** (base da convexidade facial e do ângulo nasolabial, que são medidos em relação à horizontal) e uma **linha vertical pelo subnasal** (referência de projeção labial) — ambas tracejadas, ambas opcionais em conjunto com os restantes planos.
+
+### Planos de referência sobrepostos ao traçado
+- Caixa **"Planos de referência"** no painel da Análise Digital (cefalometria), ligada por omissão; a escolha fica guardada na ficha do paciente.
+- Desenha, estendidos para lá dos pontos que os definem e identificados por uma legenda no canto: **SN** (Sela–Násio), **plano de Frankfort** (Or–Po), **plano mandibular** (Go–Gn), **NA**, **NB**, **S–Gn** (eixo Y) e **N–Pg** (plano facial), mais os **eixos dos incisivos** (ápice–bordo) e a **perpendicular ao plano mandibular** no bordo incisal inferior — que é a linha a partir da qual o IMPA é contado (90° = incisivo perpendicular).
+- Assinala no próprio traçado os valores de **SNA, SNB, SN-GeGn e IMPA**, para o clínico poder validar visualmente aquilo que a tabela apresenta.
+- As linhas auxiliares (NA, NB, S–Gn, N–Pg e eixos) são tracejadas, para não competirem com o traçado dos pontos; só se desenha o que tem os pontos necessários marcados.
+- Os planos entram também no **traçado do dossiê PDF** (linhas + legenda, sem os rótulos de valores, para não sobrecarregar a imagem).
 
 ### Análise de modelos — correções e novos índices
 - **Índice de Bolton estava errado**: era calculado como soma dos 6 anteriores inferiores ÷ soma dos 6 superiores, que é a proporção *total*, e apresentado como Bolton anterior. Agora existem os dois, com as normas corretas: **Bolton anterior** (S4inf/S4sup, 77,2% ± 1,6) e **Bolton total** (S6inf/S6sup, 91,3% ± 1,9).
