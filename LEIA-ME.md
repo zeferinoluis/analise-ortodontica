@@ -23,7 +23,7 @@
 - **Análise facial mais completa**: mantém os terços verticais, acrescenta ângulo nasolabial, convexidade facial do perfil mole, e proporção largura bucal/facial — com 12 marcos anatómicos faciais. (Nesta versão passou a estar dividida em frente e perfil — ver secção seguinte.)
 - O dossiê PDF agora inclui a tabela cefalométrica completa da análise escolhida e a tabela facial completa (antes só tinha os terços verticais), com numeração de secções calculada automaticamente.
 - `manifest.json` com ícones **locais** (192, 512, e uma versão *maskable* para Android), `scope` e `id` — necessários para o PWABuilder gerar um pacote Android válido.
-- `service-worker.js` guarda também em cache o `manifest.json` e os ícones. A versão de cache (`CACHE_NAME`) é agora **`ortoanalytic-cache-v13-13`** e deve ser sempre incrementada quando os ficheiros da app mudarem, para os clientes instalados (PWA/APK) substituírem a cache antiga.
+- `service-worker.js` guarda também em cache o `manifest.json` e os ícones. A versão de cache (`CACHE_NAME`) é agora **`ortoanalytic-cache-v13-14`** e deve ser sempre incrementada quando os ficheiros da app mudarem, para os clientes instalados (PWA/APK) substituírem a cache antiga.
 - Layout e estilos (`styles.css`) mantidos sem alterações.
 
 ## Nova funcionalidade: Fotométrica Facial em duas vistas (frente + perfil)
@@ -49,6 +49,11 @@
 - Para cada arcada mostra o **contorno do arco** (segmento circular, com os incisivos na linha média e os molares nas extremidades) e, por baixo, as **quatro larguras**: inter-pré-molar e inter-molar medidas (linha cheia, na cor da arcada) e as previstas por **Korkhaus** (superior) e **Pont** (inferior), a tracejado. O esquema é proporcional às larguras introduzidas, para se ver de imediato onde falta ou sobra espaço transversal.
 - Abaixo do esquema, a legenda indica a **diferença em mm** entre medido e previsto em cada uma das quatro medidas.
 - O esquema entra também no **dossiê PDF**, em página própria, a seguir aos resultados de modelos. Como o html2canvas é irregular a desenhar SVG inline, o esquema é **rasterizado para PNG** (a 2x, para sair nítido) antes de ser embutido, com a proporção real preservada dentro da área útil do A4.
+
+### Correções no esquema das arcadas e no dossiê PDF
+- O SVG do esquema **não reserva mais 800 px de altura** no painel (o `height` em píxeis passou a ser dado apenas na rasterização): era isso que fazia o esquema aparecer com o dobro da altura e o cortava na aplicação.
+- **Textos do esquema reposicionados**: o nome de cada arcada deixou de ficar cortado no topo (estava em `y = −26`) e os rótulos das larguras passaram a ficar **acima** das marcas das linhas de medida, em vez de lhes passarem por cima.
+- **Títulos das secções do PDF com folga**: os títulos de página estavam encostados ao limite da folha (6 secções para 3 quebras de página), o que cortava o topo das letras; passaram a ter margem superior, as margens da folha aumentaram para 15/14 mm em cima/baixo e o modo de quebra deixou de usar `avoid-all` (que empurrava blocos para o topo exato da página).
 
 ### Linhas de referência na fotometria de perfil
 - No traçado da fotografia de perfil passou a figurar uma **linha horizontal pela glabela** (base da convexidade facial e do ângulo nasolabial, que são medidos em relação à horizontal) e uma **linha vertical pelo subnasal** (referência de projeção labial) — ambas tracejadas, ambas opcionais em conjunto com os restantes planos.

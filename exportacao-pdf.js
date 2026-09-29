@@ -104,8 +104,12 @@ function gerarCanvasVirtualFundidoAsync(chaveEstudo) {
 function gerarImagemDiagramaArcadas() {
     return new Promise((resolve) => {
         try {
-            const svg = svgDiagramaArcadas();
+            let svg = svgDiagramaArcadas();
             if (!svg) return resolve(null);
+            // O SVG do ecrã não traz width/height em px (senão reservava 800px de
+            // altura no painel); para rasterizar é preciso dá-las explicitamente,
+            // senão o browser usa a largura do contentor e a imagem sai pequena.
+            svg = svg.replace(/<svg /, '<svg width="1240" height="800" ');
             const ESCALA = 2;   // 2x para a imagem sair nítida no PDF
             const img = new Image();
             img.onload = function() {
@@ -246,12 +250,12 @@ async function exportarDossierClinicoCompletoPDF() {
             </p>
             
             <div style="margin-top:15px;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${++secNum}. Plano Geral & Indicações Clínicas</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 6px 0;">${++secNum}. Plano Geral & Indicações Clínicas</h3>
                 <p style="background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:9.5pt; border-radius:4px; text-align:justify; margin:0;">${indicacoesSafe || 'Sem indicações registadas para este caso.'}</p>
             </div>
             
             <div style="margin-top:25px;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${++secNum}. Historial de Consultas & Evolução Temporal</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 6px 0;">${++secNum}. Historial de Consultas & Evolução Temporal</h3>
                 ${obterHtmlHistoricoParaPDF()}
             </div>
         </div>
@@ -260,7 +264,7 @@ async function exportarDossierClinicoCompletoPDF() {
     // CONTEÚDO DA PÁGINA 2 — CEFALOMETRIA + MODELOS + FACIAL
     pdfHtml += `
         <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Cefalométrica — ${nomesAnalise[tipoAnaliseAtual] || tipoAnaliseAtual}</h3>
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Análise Cefalométrica — ${nomesAnalise[tipoAnaliseAtual] || tipoAnaliseAtual}</h3>
             <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
                 <thead>
                     <tr style="background:#f1f5f9;">
@@ -332,7 +336,7 @@ async function exportarDossierClinicoCompletoPDF() {
         const estiloD = estiloImgSeguro(dimD.w, dimD.h, 176, 210);
         blocoDiagrama = `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Esquema das Larguras Transversais</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Esquema das Larguras Transversais</h3>
                 <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.</span>
                 <img src="${desenhoArcadas}" style="${estiloD} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
@@ -359,10 +363,10 @@ async function exportarDossierClinicoCompletoPDF() {
 
     pdfHtml += `
         <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
             ${blocoModelos}
 
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:10px; margin-top:25px;">${++secNum}. Resultados da Análise Fotométrica Facial (Frente e Perfil)</h3>
+            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Resultados da Análise Fotométrica Facial (Frente e Perfil)</h3>
             ${blocoResultadosFacialPDF('Vista de FRENTE — proporções e simetria', 'Terços verticais, proporções horizontais, linha bipupilar e assimetrias entre lado direito e esquerdo.', relatorioFacial.frente)}
             <div style="page-break-inside: avoid !important;">
                 ${blocoResultadosFacialPDF('Vista de PERFIL — perfil mole e terço inferior', 'Ângulos nasolabial, mentolabial e cervicomental, convexidade facial e posição do lábio superior.', relatorioFacial.perfil)}
@@ -379,7 +383,7 @@ async function exportarDossierClinicoCompletoPDF() {
         let estiloC = estiloImgSeguro(dimC.w, dimC.h);
         pdfHtml += `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. Cefalometria Radiográfica Computadorizada</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin:12px 0 10px 0;">${++secNum}. Cefalometria Radiográfica Computadorizada</h3>
                 <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).</span>
                 <img src="${cefaloImgData}" style="${estiloC} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
@@ -397,7 +401,7 @@ async function exportarDossierClinicoCompletoPDF() {
         let estiloF = estiloImgSeguro(dimF.w, dimF.h);
         pdfHtml += `
             <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin-bottom:10px;">${++secNum}. ${pagina.titulo}</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin:12px 0 10px 0;">${++secNum}. ${pagina.titulo}</h3>
                 <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">${pagina.nota}</span>
                 <img src="${pagina.dados}" style="${estiloF} border:1px solid #cbd5e1; border-radius:4px;">
             </div>
@@ -413,7 +417,7 @@ async function exportarDossierClinicoCompletoPDF() {
         
         pdfHtml += `
             <div style="page-break-before: always;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin-bottom:6px;">${secRepositorio}. Repositório Iconográfico Geral</h3>
+                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 6px 0;">${secRepositorio}. Repositório Iconográfico Geral</h3>
                 <p style="font-size:9pt; color:#64748b; margin:0 0 10px 0;">${keys.length} imagem(ns) registada(s) neste processo clínico.</p>
             </div>
         `;
@@ -443,7 +447,7 @@ async function exportarDossierClinicoCompletoPDF() {
 
     // Configurações para A4 sem cortes de imagem
     const opt = {
-        margin: [12, 12, 12, 12], 
+        margin: [15, 12, 14, 12], 
         filename: `Dossie_Ortodontico_Final_${cod}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
@@ -454,7 +458,7 @@ async function exportarDossierClinicoCompletoPDF() {
             allowTaint: true
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        pagebreak: { mode: ['css', 'legacy'], avoid: '.evitar-quebra' }
     };
 
     html2pdf().set(opt).from(element).save();

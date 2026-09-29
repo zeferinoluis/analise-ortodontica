@@ -257,31 +257,35 @@ function gerarDiagramaArcadas(r) {
         return `<line x1="${e1}" y1="${y1}" x2="${e2}" y2="${y1}" stroke="${cor}" stroke-width="3"${tracejada ? ' stroke-dasharray="12,8"' : ''}/>` +
             `<line x1="${e1}" y1="${y1 - marca}" x2="${e1}" y2="${y1 + marca}" stroke="${cor}" stroke-width="3"/>` +
             `<line x1="${e2}" y1="${y1 - marca}" x2="${e2}" y2="${y1 + marca}" stroke="${cor}" stroke-width="3"/>` +
-            texto((e1 + e2) / 2, y1 - 13, rotulo, cor, 23, 'middle');
+            texto((e1 + e2) / 2, y1 - 22, rotulo, cor, 23, 'middle');
     }
 
     function desenharArcada(origemY, nome, larguraPm, larguraM, previstoPm, previstoM, cor) {
         const curva = curvaArco(larguraM);
         // Extremos (esquerdo e direito) de uma largura, simétricos em relação a CX
         const extremos = (largura) => [CX - (largura / 2) * ESCALA, CX + (largura / 2) * ESCALA];
-        const yPm = Math.round(curva.profundidadeMax * ESCALA);
-        const yM = Math.round(curva.profundidadeMax * ESCALA);
+        // O arco começa abaixo do nome da arcada: o vértice do arco é o seu ponto
+        // mais baixo, por isso é ele que define onde os rótulos podem começar.
+        const TOPO_ARCO = 46;
+        const alturaArco = Math.round(curva.profundidadeMax * ESCALA);
+        const yPm = TOPO_ARCO + alturaArco;
+        const yM = TOPO_ARCO + alturaArco;
         // As linhas de medida ficam ABAIXO do arco (não por cima dele), para não
         // cruzarem a curva nem os rótulos
         const linhaPm = yPm + 40, linhaPmPrev = yPm + 78;
         const linhaM = yM + 126, linhaMPrev = yM + 164;
         let svg = `<g transform="translate(0, ${origemY})">`;
         // Eixo da linha média, para se perceber a simetria do esquema
-        svg += `<line x1="${CX}" y1="0" x2="${CX}" y2="${linhaM + 12}" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="10,8"/>`;
+        svg += `<line x1="${CX}" y1="${TOPO_ARCO}" x2="${CX}" y2="${linhaM + 12}" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="10,8"/>`;
         // Contorno do arco (incisivos na linha média, molares nas extremidades)
-        svg += `<path d="${curva.caminho}" fill="none" stroke="${cor}" stroke-width="6" stroke-linejoin="round"/>`;
+        svg += `<g transform="translate(0, ${TOPO_ARCO})"><path d="${curva.caminho}" fill="none" stroke="${cor}" stroke-width="6" stroke-linejoin="round"/></g>`;
         // Larguras: medidas (cheias, destacadas) e previstas (tracejadas, a cinzento)
         svg += linhaLargura.apply(null, extremos(larguraPm).concat([linhaPm, cor, 'medido ' + larguraPm.toFixed(1) + ' mm', false]));
         svg += linhaLargura.apply(null, extremos(previstoPm).concat([linhaPmPrev, '#94a3b8', 'previsto ' + previstoPm.toFixed(1) + ' mm', true]));
         svg += linhaLargura.apply(null, extremos(larguraM).concat([linhaM, cor, 'medido ' + larguraM.toFixed(1) + ' mm', false]));
         svg += linhaLargura.apply(null, extremos(previstoM).concat([linhaMPrev, '#94a3b8', 'previsto ' + previstoM.toFixed(1) + ' mm', true]));
         // Nome da arcada por cima do arco
-        svg += texto(CX, -26, nome, '#0f172a', 28, 'middle');
+        svg += texto(CX, 34, nome, '#0f172a', 28, 'middle');
         svg += '</g>';
         return svg;
     }
@@ -291,9 +295,9 @@ function gerarDiagramaArcadas(r) {
     const dPmInf = diferenca(d.dPmInf, r.pontPmInf), dMInf = diferenca(d.dMInf, r.pontMInf);
     const resumoLargura = (rotulo, valor) => `${rotulo}: ${valor > 0 ? '+' : ''}${valor.toFixed(1)} mm`;
 
-    // width/height explícitos (para além do viewBox): sem eles o rasterizador não
-    // sabe que dimensões dar à imagem ao desenhar o SVG num canvas
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LARG} ${ALT}" width="${LARG}" height="${ALT}" style="max-width:760px; display:block; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px;" role="img" aria-label="Esquema das larguras transversais das arcadas">` +
+    // O viewBox define a proporção; o width/height em píxeis fica no elemento que
+    // o mostra (senão o SVG reservava 800px de altura no painel do ecrã).
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LARG} ${ALT}" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px;" role="img" aria-label="Esquema das larguras transversais das arcadas">` +
         desenharArcada(150, 'ARCADA SUPERIOR — larguras previstas por Korkhaus', d.dPmSup, d.dMSup, r.korkhausPm, r.korkhausM, '#0284c7') +
         desenharArcada(470, 'ARCADA INFERIOR — larguras previstas pelo índice de Pont', d.dPmInf, d.dMInf, r.pontPmInf, r.pontMInf, '#7c3aed') +
         `</svg>`;
