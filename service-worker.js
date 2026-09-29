@@ -81,9 +81,12 @@ self.addEventListener('fetch', (event) => {
     (url.origin === self.location.origin && /\/(index\.html)?$|\/[^/]+\.js$|styles\.css$|manifest\.json$/.test(url.pathname));
 
   if (ehAppShell) {
-    // NETWORK-FIRST
+    // NETWORK-FIRST, com `cache: 'no-store'`: sem isto o browser podia devolver
+    // uma cópia antiga do script da cache HTTP e o utilizador continuava a ver o
+    // comportamento da versão anterior mesmo depois de a app ser atualizada
+    // (foi o que aconteceu com a correção da paginação do dossiê).
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then((response) => {
           if (response && response.status === 200) {
             const clone = response.clone();

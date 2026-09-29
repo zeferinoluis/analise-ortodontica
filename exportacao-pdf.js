@@ -363,10 +363,23 @@ async function exportarDossierClinicoCompletoPDF() {
     // ------------------------------------------------------------ blocos lógicos
     // Cada bloco é indivisível: é a unidade que a paginação pode mover de página,
     // por isso nenhum parágrafo, tabela ou imagem é cortado a meio.
+    // `manterJunto` = este bloco tem de ficar na mesma página que o seguinte
+    // (títulos de secção e legendas de imagens). É o que impede o cenário
+    // "título numa página, análise/foto na seguinte".
+    const ehTitulo = (html) => /^\s*<h[1-5][\s>]/i.test(String(html || ''));
+
     const blocos = [];
-    const bloco = (secao, html, alturaMaxMm, dimensoes) => { blocos.push({ secao: secao || null, html: html, alturaMaxMm: alturaMaxMm || null, dimensoes: dimensoes || null }); };
+    const bloco = (secao, html, alturaMaxMm, dimensoes, manterJunto) => {
+        blocos.push({
+            secao: secao || null, html: html, alturaMaxMm: alturaMaxMm || null,
+            dimensoes: dimensoes || null, manterJunto: manterJunto === undefined ? ehTitulo(html) : !!manterJunto,
+        });
+    };
     const grupo = (secao, blocosDoGrupo) => {
-        blocosDoGrupo.forEach(b => blocos.push({ secao: secao, html: b.html, alturaMaxMm: b.alturaMaxMm || null, dimensoes: b.dimensoes || null }));
+        blocosDoGrupo.forEach(b => blocos.push({
+            secao: secao, html: b.html, alturaMaxMm: b.alturaMaxMm || null,
+            dimensoes: b.dimensoes || null, manterJunto: b.manterJunto === undefined ? ehTitulo(b.html) : !!b.manterJunto,
+        }));
     };
 
     const titulo = (texto) => `<h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:0;">${texto}</h3>`;
@@ -459,7 +472,7 @@ async function exportarDossierClinicoCompletoPDF() {
         const secEsquema = numSecao();
         grupo(secEsquema, [
             { html: titulo(`${secEsquema}. Esquema das Larguras Transversais`) },
-            { html: paragrafo('Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.', 'font-size:9.5pt; color:#475569;') },
+            { html: paragrafo('Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.', 'font-size:9.5pt; color:#475569;') , manterJunto: true },
             { html: `<img src="${desenhoArcadas}" style="display:block; margin:0 auto; object-fit:contain; border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 200, dimensoes: ESQUEMA_ARCADAS_PX },
         ]);
     }
@@ -469,7 +482,7 @@ async function exportarDossierClinicoCompletoPDF() {
         const secCefaloImg = numSecao();
         grupo(secCefaloImg, [
             { html: titulo(`${secCefaloImg}. Cefalometria Radiográfica Computadorizada`) },
-            { html: paragrafo('Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).', 'font-size:9.5pt; color:#475569;') },
+            { html: paragrafo('Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).', 'font-size:9.5pt; color:#475569;') , manterJunto: true },
             { html: `<img src="${cefaloImgData}" style="${estiloImagemPDF(228)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 228 },
         ]);
     }
@@ -483,7 +496,7 @@ async function exportarDossierClinicoCompletoPDF() {
         const secFacialImg = numSecao();
         grupo(secFacialImg, [
             { html: titulo(`${secFacialImg}. ${pagina.titulo}`) },
-            { html: paragrafo(pagina.nota, 'font-size:9.5pt; color:#475569;') },
+            { html: paragrafo(pagina.nota, 'font-size:9.5pt; color:#475569;') , manterJunto: true },
             { html: `<img src="${pagina.dados}" style="${estiloImagemPDF(236)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 236 },
         ]);
     }
@@ -599,29 +612,52 @@ async function exportarDossierClinicoCompletoPDF() {
             html: blocos[i].html,
             alturaMaxMm: blocos[i].alturaMaxMm,
             dimensoes: blocos[i].dimensoes,
+            manterJunto: blocos[i].manterJunto,
         };
     });
 
     // --------------------------------------------------------- paginação
-    // Preenche cada folha com os blocos inteiros que couberem. A quebra cai
-    // sempre no espaço entre blocos; um bloco maior do que a folha (caso raro
-    // de uma tabela gigantesca) fica sozinho numa página e é cortado no limite.
+    // Cada folha é preenchida com os blocos inteiros que couberem, mas os blocos
+    // marcados com `manterJunto` formam um grupo com o bloco seguinte: o título de
+    // uma secção nunca fica no fim de uma página com a análise ou a fotografia na
+    // página seguinte. Se o grupo não couber no que resta da folha, passa inteiro
+    // para a folha seguinte. Um grupo maior do que uma folha fica sozinho e é
+    // cortado no limite (caso raro de uma tabela gigantesca).
     const LIMITE = PDF_GEOM.limiteAlt;
+
+    const grupos = [];
+    for (let i = 0; i < medidas.length; i++) {
+        const inicio = i;
+        let fim = i;
+        while (fim < medidas.length - 1 && medidas[fim].manterJunto) fim++;
+        grupos.push({ inicio, fim });
+        i = fim;
+    }
+
     const paginas = [];
-    let cursor = 0;
-    while (cursor < medidas.length) {
-        const topo = medidas[cursor].topo;
+    let g = 0;
+    while (g < grupos.length) {
+        const inicioBloco = grupos[g].inicio;
+        const topo = medidas[inicioBloco].topo;
         const limiteFolha = topo + LIMITE;
-        let fim = cursor;
-        while (fim + 1 < medidas.length && medidas[fim + 1].base <= limiteFolha) fim++;
-        if (medidas[fim].base > limiteFolha) {
-            // Nem o primeiro bloco cabe: fica sozinho na folha
-            fim = cursor;
-            paginas.push({ inicio: cursor, fim: cursor + 1, inicioCss: topo, limite: Math.min(medidas[cursor].base, limiteFolha) });
-        } else {
-            paginas.push({ inicio: cursor, fim: fim + 1, inicioCss: topo, limite: Math.min(medidas[fim].base, limiteFolha) });
+        let fimGrupo = g;
+        let fimBloco = grupos[g].fim;
+        while (fimGrupo + 1 < grupos.length && medidas[grupos[fimGrupo + 1].fim].base <= limiteFolha) {
+            fimGrupo++;
+            fimBloco = grupos[fimGrupo].fim;
         }
-        cursor = fim + 1;
+        if (medidas[fimBloco].base > limiteFolha) {
+            // Nem o primeiro grupo cabe: fica sozinho na folha
+            fimGrupo = g;
+            fimBloco = grupos[g].fim;
+        }
+        paginas.push({
+            inicio: inicioBloco,
+            fim: fimBloco + 1,
+            inicioCss: topo,
+            limite: Math.min(medidas[fimBloco].base, limiteFolha),
+        });
+        g = fimGrupo + 1;
     }
 
     // ------------------------------------------------- construção das páginas
