@@ -2,30 +2,37 @@
 // EXPORTAÇÃO PDF — geração do dossiê clínico completo (html2pdf/html2canvas)
 // ==========================================================================
 
-// Clona a tabela do histórico e remove a última coluna (Ações — Editar/Apagar), que só faz
-// sentido no ecrã; o PDF nunca deve mostrar botões interativos.
-function obterHtmlHistoricoParaPDF() {
-    const original = document.getElementById('table-evolution');
-    const clone = original.cloneNode(true);
-    clone.querySelectorAll('tr').forEach(tr => {
-        const ultima = tr.lastElementChild;
-        if (ultima) ultima.remove();
-    });
-    return clone.outerHTML;
+// Alguns textos do dossiê (por exemplo o resumo da interpretação automática
+// guardada no histórico) já chegam com entidades HTML de uma escrita anterior.
+// É preciso desfazê-las antes de voltar a escapar, senão o PDF mostra "&#39;".
+function textoSimplesParaPDF(txt) {
+    return String(txt == null ? '' : txt)
+        .replace(/&#0*39;/g, "'")
+        .replace(/&#0*34;/g, '"')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
 }
 
+// Cores do status clínico, partilhadas pelas tabelas de resultados do dossiê.
+const COR_STATUS_PDF = { 'status-ok': '#16a34a', 'status-dev': '#dc2626', '': '#475569' };
+
+// Linhas de uma tabela de resultados (parâmetro, medido, norma, status), já com
+// os sub-cabeçalhos de cada grupo.
 function renderizarTabelaResultadosPDF(linhas) {
     if (!linhas || linhas.length === 0) {
         return `<tr><td colspan="4" style="padding:6px; border:1px solid #cbd5e1; text-align:center;">Análise não executada (pontos insuficientes).</td></tr>`;
     }
     let html = ''; let grupoAtual = null;
-    const cor = { 'status-ok': '#16a34a', 'status-dev': '#dc2626', '': '#475569' };
     linhas.forEach(l => {
         if (l.grupo !== grupoAtual) {
             grupoAtual = l.grupo;
-            html += `<tr><td colspan="4" style="padding:5px 6px; border:1px solid #cbd5e1; background:#eef2f7; font-weight:bold; color:#0284c7;">${grupoAtual}</td></tr>`;
+            html += `<tr><td colspan="4" style="padding:5px 6px; border:1px solid #cbd5e1; background:#eef2f7; font-weight:bold; color:#0284c7;">${escaparHTML(grupoAtual)}</td></tr>`;
         }
-        html += `<tr><td style="padding:6px; border:1px solid #cbd5e1;">${l.label}</td><td style="padding:6px; border:1px solid #cbd5e1;">${l.valor}</td><td style="padding:6px; border:1px solid #cbd5e1;">${l.norma}</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${cor[l.status]||'#475569'};">${l.texto}</td></tr>`;
+        html += `<tr><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.label)}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.valor) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.norma) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${COR_STATUS_PDF[l.status] || '#475569'};">${escaparHTML(l.texto) || '—'}</td></tr>`;
     });
     return html;
 }
@@ -181,49 +188,66 @@ function gerarImagemComTitulo(src, titulo) {
     });
 }
 
-// Calcula o style de uma <img> para que caiba sempre dentro da área útil do A4
-// sem nunca ser cortada, preservando proporção
-function estiloImgSeguro(nw, nh, areaLargMm = 170, areaAltMm = 233) {
-    // A4 com margens de 12mm: área útil ≈ 186×267mm; imagem deve caber em ~170×233mm (com título)
-    // html2pdf usa scale:2, então 1mm ≈ 3.78px
-    const PX_POR_MM = 3.78;
-    const maxW = areaLargMm * PX_POR_MM;
-    const maxH = areaAltMm * PX_POR_MM;
+// --------------------------------------------------------------------------
+// GEOMETRIA DO DOSSIÊ — A4 com margens fixas (as mesmas do jsPDF, mais abaixo).
+// Todas as medidas em milímetros, convertidas para píxeis CSS à razão padrão
+// de 96 ppp, que é a que o browser (e o html2canvas) usa a 100% de zoom.
+// --------------------------------------------------------------------------
+const PDF_GEOM = (function () {
+    const LARGURA = 210, ALTURA = 297, MARGEM = 12;
+    const MM_PX = 96 / 25.4;
+    const conteudoLarg = (LARGURA - 2 * MARGEM) * MM_PX;   // ≈ 703 px
+    const conteudoAlt = (ALTURA - 2 * MARGEM) * MM_PX;     // ≈ 1032 px
+    // Duas folgas evitam que o arredondamento do html2pdf empurre um bloco
+    // para uma página extra: uma no limite útil e outra na largura das imagens.
+    return { LARGURA, ALTURA, MARGEM, MM_PX, conteudoLarg, conteudoAlt, limiteAlt: conteudoAlt - 4 };
+})();
 
-    if (!nw || !nh) return 'width:100%; height:auto; display:block; margin:0 auto;';
+// Largura máxima (mm) pedida a uma imagem para que nunca seja cortada na
+// horizontal — independentemente do dpi interno usado por quem gera o PDF.
+const PDF_LARG_IMG_MM = 172;
 
-    const ratio = nw / nh;
-    let w = maxW;
-    let h = w / ratio;
-    if (h > maxH) { h = maxH; w = h * ratio; }
-
-    return `width:${Math.round(w)}px; height:${Math.round(h)}px; display:block; margin:0 auto; object-fit:contain;`;
+// Devolve <img style="..."> que caiba SEMPRE na área útil, seja qual for a
+// dimensão nativa do ficheiro: o browser resolve a proporção, não uma
+// constante de px-por-mm que pode não corresponder à escala final.
+function estiloImagemPDF(alturaMaxMm) {
+    const limite = (alturaMaxMm || PDF_GEOM.conteudoAlt / PDF_GEOM.MM_PX).toFixed(1);
+    return `max-width:${PDF_LARG_IMG_MM}mm; max-height:${limite}mm; width:auto; height:auto; display:block; margin:0 auto; object-fit:contain;`;
 }
 
 // ==========================================================================
-// RENDERIZADOR INTEGRAL DA VERSÃO 7.0 (SISTEMA FLUIDO EM BLOCOS VERTICAIS)
+// RENDERIZADOR INTEGRAL DA VERSÃO 7.1 — PAGINAÇÃO PRÓPRIA, SEM CORTES
+//
+// Porque mudou: até à 7.0 o dossiê era rasterizado num único canvas e o
+// html2pdf fatiava-o de N em N pixels. As quebras caíam a meio de linhas de
+// texto e de linhas de tabela (análises e conclusões saíam truncadas) e a
+// sobreposição de estilos do ecrã ainda colapsava tabelas.
+//
+// Agora: o conteúdo é construído em blocos, medido no browser e distribuído
+// por páginas A4 de altura fixa. As quebras só caem entre blocos inteiros,
+// pelo que nenhuma análise, linha de tabela ou conclusão fica cortada.
 // ==========================================================================
 async function exportarDossierClinicoCompletoPDF() {
     const nome = document.getElementById('paciente-nome').value;
     const cod = document.getElementById('paciente-id').value;
-    let secNum = 0; // contador de secções — evita numeração manual frágil
 
-    const element = document.createElement('div');
-    element.style.width = '170mm'; 
-    element.style.margin = '0 auto';
-    element.style.fontFamily = 'Arial, sans-serif';
-    element.style.color = '#0f172a';
+    // Se uma exportação anterior tiver ficado a meio (erro, cancelamento), remove
+    // os restos do DOM para que esta geração comece sempre do zero.
+    document.querySelectorAll('[data-pdf-pagina], [data-pdf-medicao]').forEach(n => n.remove());
 
-    // Aguarda o carregamento real das imagens antes de gerar o canvas
-    // (a fotometria facial tem duas vistas independentes: frente e perfil)
+    const elemento = document.createElement('div');
+    elemento.setAttribute('data-pdf-pagina', '1');
+    elemento.style.cssText = `width:${PDF_GEOM.conteudoLarg}px; max-width:${PDF_GEOM.conteudoLarg}px; margin:0 auto; font-family:Arial, Helvetica, sans-serif; color:#0f172a; background:#ffffff;`;
+
+    // ---------------------------------------------------------------- imagens
     let cefaloImgData = await gerarCanvasVirtualFundidoAsync('cefalometria');
     let facialFrenteImgData = await gerarCanvasVirtualFundidoAsync('facialFrente');
     let facialPerfilImgData = await gerarCanvasVirtualFundidoAsync('facialPerfil');
 
     const nomeSafe = escaparHTML(nome);
     const codSafe = escaparHTML(cod);
-    const indicacoesSafe = escaparHTML(document.getElementById('indicacoes-gerais').value);
-    const anomaliasSafe = escaparHTML(document.getElementById('anomalias-obs').value);
+    const indicacoesSafe = escaparHTML(textoSimplesParaPDF(document.getElementById('indicacoes-gerais').value));
+    const anomaliasSafe = escaparHTML(textoSimplesParaPDF(document.getElementById('anomalias-obs').value));
 
     // Métricas de modelos: mesma função usada no ecrã (nunca fórmulas duplicadas)
     const resultadosModelos = calcularResultadosModelos();
@@ -235,60 +259,69 @@ async function exportarDossierClinicoCompletoPDF() {
     let linhasCefalo = calcularResultadosCefalometricosCompleto(tipoAnaliseAtual);
     let relatorioFacial = calcularRelatorioFacialCompleto();
 
-    // CONTEÚDO DA PÁGINA 1
-    let pdfHtml = `
-        <div style="page-break-inside: avoid !important;">
-            <div style="border-bottom: 3px solid #0284c7; padding-bottom: 5px; margin-bottom: 20px;">
-                <h1 style="margin: 0; color: #0f172a; font-size: 21pt;">Dossiê Clínico de Diagnóstico Ortodôntico</h1>
-                <span style="color:#64748b; font-size:9pt;">OrtoAnalytic Pro System v7.0 — Dr. Luís Zeferino</span>
-            </div>
-            
-            <p style="font-size:10pt; line-height:1.6; margin-bottom:25px;">
-                <strong>Paciente:</strong> ${nomeSafe} <br>
-                <strong>Processo Clínico ID:</strong> ${codSafe}<br>
-                <strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-PT')}
-            </p>
-            
-            <div style="margin-top:15px;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 6px 0;">${++secNum}. Plano Geral & Indicações Clínicas</h3>
-                <p style="background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:9.5pt; border-radius:4px; text-align:justify; margin:0;">${indicacoesSafe || 'Sem indicações registadas para este caso.'}</p>
-            </div>
-            
-            <div style="margin-top:25px;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 6px 0;">${++secNum}. Historial de Consultas & Evolução Temporal</h3>
-                ${obterHtmlHistoricoParaPDF()}
-            </div>
-        </div>
-    `;
+    // ------------------------------------------------------------ numeração
+    let secNum = 0;
+    const numSecao = () => ++secNum;
 
-    // CONTEÚDO DA PÁGINA 2 — CEFALOMETRIA + MODELOS + FACIAL
-    pdfHtml += `
-        <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Análise Cefalométrica — ${nomesAnalise[tipoAnaliseAtual] || tipoAnaliseAtual}</h3>
-            <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
-                <thead>
-                    <tr style="background:#f1f5f9;">
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Parâmetro</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Medido</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Norma</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status</th>
-                    </tr>
-                </thead>
-                <tbody>${renderizarTabelaResultadosPDF(linhasCefalo)}</tbody>
-            </table>
-            <p style="font-size:8.5pt; color:#64748b; margin:0 0 18px 0; line-height:1.5;">
-                <strong>Convenções de medição:</strong> cada análise usa o seu plano de referência clássico — Steiner: plano SN; Downs: plano de Frankfort (Or–Po); Tweed: FH com plano mandibular (Go–Gn), onde FMA = FMIA + IMPA.
-                As medições angulares dos incisivos seguem a convenção clínica sobre o eixo do dente (bordo incisal → ápice): U1–NA, L1–NB e IMPA são devolvidos no intervalo 0–180° que contém a norma publicada (U1–NA 22°, L1–NB 25°, IMPA 90°).
-                As medidas lineares (N-S, U1–NA e L1–NB lineares) exigem a calibração da régua; sem calibração aparecem assinaladas como tal.
-            </p>
-        </div>
-    `;
+    // ------------------------------------------------------------ históricos
+    // O histórico é apresentado em blocos e não numa tabela: cada consulta tem
+    // um cabeçalho (data, tipo, métricas) e as observações repartidas em troços
+    // pequenos. Assim uma interpretação longa atravessa páginas sem que nenhuma
+    // linha seja cortada, e cada troço é uma unidade que a paginação pode mover.
+    const LIMITE_CHUNK_OBS = 420;   // caracteres por troço de observações
+    const MAX_LINHAS_CHUNK = 6;     // ~6 linhas de texto por troço, a 8,5pt
 
-    // Bloco de modelos gerado a partir das MESMAS linhas do ecrã (Bolton ant./total,
-    // Korkhaus e Pont, Howes e discrepância de espaço por arcada), com os avisos de coerência.
-    const corOK = '#16a34a', corDev = '#dc2626';
-    const corLinha = { 'status-ok': corOK, 'status-dev': corDev, '': '#475569' };
+    // Reparte um texto comprido por troços pequenos sem partir palavras e sem
+    // separar números das unidades ("40,0 mm" nunca fica dividido). Junta até
+    // LIMITE_CHUNK_OBS caracteres ou MAX_LINHAS_CHUNK linhas explícitas.
+    function repartirTextoEmTrocos(texto, limite, maxLinhas) {
+        const paragrafos = String(texto || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+        const trocos = [];
+        (paragrafos.length ? paragrafos : ['—']).forEach(par => {
+            const linhas = par.split('\n');
+            linhas.forEach(linha => {
+                const palavras = linha.split(/\s+/).filter(Boolean);
+                let atual = '';
+                let contagem = 0;
+                palavras.forEach(pal => {
+                    const junto = atual ? atual + ' ' + pal : pal;
+                    if (atual && (junto.length > limite || contagem + 1 > maxLinhas)) {
+                        trocos.push(atual); atual = pal; contagem = 1;
+                    } else {
+                        atual = junto; contagem++;
+                    }
+                });
+                if (atual) trocos.push(atual);
+            });
+        });
+        return trocos.length ? trocos : ['—'];
+    }
 
+    function blocoHistoricoPDF() {
+        const registos = (appState.historicoConsultas || []);
+        const corpo = registos.map(h => {
+            const data = escaparHTML(textoSimplesParaPDF(h.data) || '—');
+            const tipo = escaparHTML(textoSimplesParaPDF(h.tipo) || '—');
+            const resumo = escaparHTML(textoSimplesParaPDF(h.resumo) || '—');
+            const trocos = repartirTextoEmTrocos(h.obs, LIMITE_CHUNK_OBS, MAX_LINHAS_CHUNK);
+            const obs = trocos.map((t, i) => {
+                const extra = i < trocos.length - 1 ? 'border-bottom:none;' : '';
+                return `<div style="padding:6px 8px; border:1px solid #cbd5e1; border-top:none; font-size:8.5pt; ${extra}">${escaparHTML(t).replace(/\n/g, '<br>')}</div>`;
+            }).join('');
+            return `<tr>
+                <td style="padding:6px 8px; border:1px solid #cbd5e1; border-bottom:none; background:#f1f5f9; font-size:8.5pt; vertical-align:top;"><strong>${data}</strong> &nbsp;·&nbsp; ${tipo}</td>
+            </tr>
+            <tr><td style="padding:6px 8px; border:1px solid #cbd5e1; border-top:none; border-bottom:none; font-size:8.5pt; color:#334155;">${resumo}</td></tr>
+            <tr><td style="padding:0; border:none;">${obs}</td></tr>`;
+        }).join('');
+
+        if (!corpo) {
+            return `<p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin:0;">Sem registos de consultas neste processo.</p>`;
+        }
+        return `<table style="width:100%; border-collapse:collapse; table-layout:fixed;"><tbody>${corpo}</tbody></table>`;
+    }
+
+    // ---------------------------------------------------- tabelas de resultados
     function linhasModelosParaPDF(linhas) {
         let html = ''; let grupoAtual = null;
         linhas.forEach(l => {
@@ -301,46 +334,14 @@ async function exportarDossierClinicoCompletoPDF() {
                 grupoAtual = l.grupo;
                 html += `<tr><td colspan="4" style="padding:5px 6px; border:1px solid #cbd5e1; background:#eef2f7; font-weight:bold; color:#0284c7;">${escaparHTML(grupoAtual)}</td></tr>`;
             }
-            html += `<tr><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.label)}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.valor) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.norma) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${corLinha[l.status] || '#475569'};">${escaparHTML(l.texto) || '—'}</td></tr>`;
+            html += `<tr><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.label)}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.valor) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1;">${escaparHTML(l.norma) || '—'}</td><td style="padding:6px; border:1px solid #cbd5e1; font-weight:bold; color:${COR_STATUS_PDF[l.status] || '#475569'};">${escaparHTML(l.texto) || '—'}</td></tr>`;
         });
         return html;
     }
 
-    let blocoModelos;
-    if (appState.modelosRegistados) {
-        const avisosModelos = resultadosModelos.avisos.length
-            ? `<p style="font-size:9pt; background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px 10px; border-radius:4px; margin:0 0 10px 0;"><strong>Verificar antes de concluir:</strong><br>${resultadosModelos.avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}</p>`
-            : '';
-        blocoModelos = avisosModelos + `
-            <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:20px;">
-                <thead>
-                    <tr style="background:#f1f5f9;">
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Métrica / Parâmetro</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Computado</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Norma de Referência</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status Clínico</th>
-                    </tr>
-                </thead>
-                <tbody>${linhasModelosParaPDF(resultadosModelos.linhas)}</tbody>
-            </table>`;
-    } else {
-        blocoModelos = `<p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin-bottom:20px;">Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)</p>`;
-    }
-
-    // PÁGINA DO ESQUEMA DAS LARGURAS TRANSVERSAIS (a seguir aos resultados de modelos)
-    let blocoDiagrama = '';
-    if (desenhoArcadas) {
-        // Dimensões REAIS da imagem rasterizada (2x), para o cálculo do estilo
-        // usar a proporção verdadeira do esquema
-        const dimD = await obterDimensoesImagem(desenhoArcadas);
-        const estiloD = estiloImgSeguro(dimD.w, dimD.h, 176, 210);
-        blocoDiagrama = `
-            <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Esquema das Larguras Transversais</h3>
-                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.</span>
-                <img src="${desenhoArcadas}" style="${estiloD} border:1px solid #cbd5e1; border-radius:4px;">
-            </div>
-        `;
+    function cabecalhoTabelaPDF(colunas) {
+        const th = `style="padding:6px; border:1px solid #cbd5e1; text-align:left;"`;
+        return `<thead><tr style="background:#f1f5f9;">${colunas.map(c => `<th ${th}>${c}</th>`).join('')}</tr></thead>`;
     }
 
     // Bloco de resultados faciais de uma vista (cabeçalho + tabela), reutilizado para frente e perfil
@@ -348,120 +349,346 @@ async function exportarDossierClinicoCompletoPDF() {
         return `
             <h4 style="color:#0284c7; font-size:10pt; margin:0 0 4px 0;">${titulo}</h4>
             <p style="font-size:8.5pt; color:#64748b; margin:0 0 6px 0;">${subtitulo}</p>
-            <table style="width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:15px;">
-                <thead>
-                    <tr style="background:#f1f5f9;">
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Parâmetro</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Medido</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Norma</th>
-                        <th style="padding:6px; border:1px solid #cbd5e1; text-align:left;">Status</th>
-                    </tr>
-                </thead>
+            <table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
+                ${cabecalhoTabelaPDF(['Parâmetro', 'Medido', 'Norma', 'Status'])}
                 <tbody>${renderizarTabelaResultadosPDF(linhas)}</tbody>
             </table>`;
     }
 
-    pdfHtml += `
-        <div style="page-break-before: always; page-break-inside: avoid !important;">
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Análise Quantitativa de Modelos de Estudo</h3>
-            ${blocoModelos}
+    // ------------------------------------------------------------ blocos lógicos
+    // Cada bloco é indivisível: é a unidade que a paginação pode mover de página,
+    // por isso nenhum parágrafo, tabela ou imagem é cortado a meio.
+    const blocos = [];
+    const bloco = (secao, html, alturaMaxMm) => { blocos.push({ secao: secao || null, html: html, alturaMaxMm: alturaMaxMm || null }); };
+    const grupo = (secao, blocosDoGrupo) => {
+        blocosDoGrupo.forEach(b => blocos.push({ secao: secao, html: b.html, alturaMaxMm: b.alturaMaxMm || null }));
+    };
 
-            <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 10px 0;">${++secNum}. Resultados da Análise Fotométrica Facial (Frente e Perfil)</h3>
-            ${blocoResultadosFacialPDF('Vista de FRENTE — proporções e simetria', 'Terços verticais, proporções horizontais, linha bipupilar e assimetrias entre lado direito e esquerdo.', relatorioFacial.frente)}
-            <div style="page-break-inside: avoid !important;">
-                ${blocoResultadosFacialPDF('Vista de PERFIL — perfil mole e terço inferior', 'Ângulos nasolabial, mentolabial e cervicomental, convexidade facial e posição do lábio superior.', relatorioFacial.perfil)}
-            </div>
-            <p style="font-size:9.5pt; background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px; margin:0; margin-top:15px;"><strong>Conclusões & Anomalias Detetadas:</strong><br>${anomaliasSafe || 'Sem notas adicionais inseridas.'}</p>
-        </div>
-    `;
+    const titulo = (texto) => `<h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:0;">${texto}</h3>`;
+    const paragrafo = (html, extra) => `<p style="font-size:9.5pt; line-height:1.5; margin:0; ${extra || ''}">${html}</p>`;
+    const aviso = (html, corFundo, corBorda, corTexto) => `<p style="font-size:9pt; background:${corFundo}; border:1px solid ${corBorda}; color:${corTexto}; padding:8px 10px; border-radius:4px; margin:0;">${html}</p>`;
 
-    pdfHtml += blocoDiagrama;
-
-    // PÁGINA DEDICADA EXCLUSIVA PARA A CEFALOMETRIA
-    if (cefaloImgData) {
-        let dimC = await obterDimensoesImagem(cefaloImgData);
-        let estiloC = estiloImgSeguro(dimC.w, dimC.h);
-        pdfHtml += `
-            <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin:12px 0 10px 0;">${++secNum}. Cefalometria Radiográfica Computadorizada</h3>
-                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).</span>
-                <img src="${cefaloImgData}" style="${estiloC} border:1px solid #cbd5e1; border-radius:4px;">
-            </div>
-        `;
+    // CAIXA DE CONCLUSÕES — parte-se em parágrafos para poder atravessar páginas
+    // sem nunca cortar uma linha a meio
+    function blocosConclusoes(texto, secao) {
+        const partes = String(texto || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+        const lista = partes.length ? partes : ['Sem notas adicionais inseridas.'];
+        lista.forEach((p, i) => {
+            const abertura = i === 0
+                ? '<strong style="display:block; margin-bottom:4px;">Conclusões &amp; Anomalias Detetadas:</strong>'
+                : '';
+            bloco(secao, `<div style="background:#f8fafc; border:1px solid #e2e8f0; border-top:${i ? 'none' : '1px solid #e2e8f0'}; border-radius:${i === 0 ? '4px 4px 0 0' : (i === lista.length - 1 ? '0 0 4px 4px' : '0')}; padding:10px 12px;">
+                ${abertura}${paragrafo(escaparHTML(p).replace(/\n/g, '<br>'), 'text-align:justify;')}
+            </div>`);
+        });
     }
 
-    // PÁGINAS DEDICADAS À FOTOMETRIA FACIAL — UMA POR VISTA (FRENTE / PERFIL)
+    // =============================== 1 e 2. FICHA + HISTÓRICO ===============================
+    bloco(null, titulo(`Dossiê Clínico de Diagnóstico Ortodôntico`) +
+        `<span style="color:#64748b; font-size:9pt;">OrtoAnalytic Pro System v7.0 — Dr. Luís Zeferino</span>` +
+        `<p style="font-size:10pt; line-height:1.6; margin:12px 0 0 0;">
+            <strong>Paciente:</strong> ${nomeSafe} <br>
+            <strong>Processo Clínico ID:</strong> ${codSafe}<br>
+            <strong>Data de Emissão:</strong> ${new Date().toLocaleDateString('pt-PT')}
+        </p>`, 0);
+
+    const secPlano = numSecao();
+    grupo(secPlano, [
+        { html: titulo(`${secPlano}. Plano Geral & Indicações Clínicas`) },
+        { html: paragrafo(indicacoesSafe || 'Sem indicações registadas para este caso.', 'background:#f8fafc; padding:12px; border:1px solid #e2e8f0; border-radius:4px; text-align:justify;') },
+    ]);
+
+    const secHistorico = numSecao();
+    grupo(secHistorico, [
+        { html: titulo(`${secHistorico}. Historial de Consultas & Evolução Temporal`) },
+        { html: blocoHistoricoPDF() },
+    ]);
+
+    // =============================== 3. CEFALOMETRIA ===============================
+    const secCefalo = numSecao();
+    const notaConvencoes = paragrafo(
+        `<strong>Convenções de medição:</strong> cada análise usa o seu plano de referência clássico — Steiner: plano SN; Downs: plano de Frankfort (Or–Po); Tweed: FH com plano mandibular (Go–Gn), onde FMA = FMIA + IMPA.
+        As medições angulares dos incisivos seguem a convenção clínica sobre o eixo do dente (bordo incisal → ápice): U1–NA, L1–NB e IMPA são devolvidos no intervalo 0–180° que contém a norma publicada (U1–NA 22°, L1–NB 25°, IMPA 90°).
+        As medidas lineares (N-S, U1–NA e L1–NB lineares) exigem a calibração da régua; sem calibração aparecem assinaladas como tal.`,
+        'font-size:8.5pt; color:#64748b; text-align:justify;');
+    grupo(secCefalo, [
+        { html: titulo(`${secCefalo}. Análise Cefalométrica — ${nomesAnalise[tipoAnaliseAtual] || tipoAnaliseAtual}`) },
+        { html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
+                ${cabecalhoTabelaPDF(['Parâmetro', 'Medido', 'Norma', 'Status'])}
+                <tbody>${renderizarTabelaResultadosPDF(linhasCefalo)}</tbody>
+            </table>` },
+        { html: notaConvencoes },
+    ]);
+
+    // =============================== 4. MODELOS ===============================
+    const secModelos = numSecao();
+    const blocosModelos = [{ html: titulo(`${secModelos}. Análise Quantitativa de Modelos de Estudo`) }];
+    if (appState.modelosRegistados) {
+        if (resultadosModelos.avisos.length) {
+            blocosModelos.push({ html: aviso(`<strong>Verificar antes de concluir:</strong><br>${resultadosModelos.avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}`, '#fffbeb', '#fde68a', '#92400e') });
+        }
+        blocosModelos.push({ html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
+                ${cabecalhoTabelaPDF(['Métrica / Parâmetro', 'Computado', 'Norma de Referência', 'Status Clínico'])}
+                <tbody>${linhasModelosParaPDF(resultadosModelos.linhas)}</tbody>
+            </table>` });
+    } else {
+        blocosModelos.push({ html: paragrafo('Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)', 'background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px;') });
+    }
+    grupo(secModelos, blocosModelos);
+
+    // =============================== 5. FACIAL ===============================
+    const secFacial = numSecao();
+    grupo(secFacial, [
+        { html: titulo(`${secFacial}. Resultados da Análise Fotométrica Facial (Frente e Perfil)`) },
+        { html: blocoResultadosFacialPDF('Vista de FRENTE — proporções e simetria', 'Terços verticais, proporções horizontais, linha bipupilar e assimetrias entre lado direito e esquerdo.', relatorioFacial.frente) },
+        { html: blocoResultadosFacialPDF('Vista de PERFIL — perfil mole e terço inferior', 'Ângulos nasolabial, mentolabial e cervicomental, convexidade facial e posição do lábio superior.', relatorioFacial.perfil) },
+    ]);
+
+    // =============================== 6. CONCLUSÕES ===============================
+    const secConclusoes = numSecao();
+    grupo(secConclusoes, [{ html: titulo(`${secConclusoes}. Conclusões & Anomalias Detetadas`) }]);
+    blocosConclusoes(anomaliasSafe, secConclusoes);
+
+    // =============================== 7. ESQUEMA DAS LARGURAS ===============================
+    if (desenhoArcadas) {
+        const secEsquema = numSecao();
+        grupo(secEsquema, [
+            { html: titulo(`${secEsquema}. Esquema das Larguras Transversais`) },
+            { html: paragrafo('Contorno de cada arco com as larguras inter-pré-molar e inter-molar medidas (linha cheia) e previstas por Korkhaus (arcada superior) e pelo índice de Pont (arcada inferior), a tracejado. Esquema proporcional às larguras introduzidas.', 'font-size:9.5pt; color:#475569;') },
+            { html: `<img src="${desenhoArcadas}" style="${estiloImagemPDF(200)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 200 },
+        ]);
+    }
+
+    // =============================== 8+. IMAGENS (UMA POR PÁGINA) ===============================
+    if (cefaloImgData) {
+        const secCefaloImg = numSecao();
+        grupo(secCefaloImg, [
+            { html: titulo(`${secCefaloImg}. Cefalometria Radiográfica Computadorizada`) },
+            { html: paragrafo('Camada de vetores sagitais em píxeis absolutos nativos da telerradiografia, com os planos de referência usados nas medições (SN, Frankfort, plano mandibular, NA/NB e eixos incisivos).', 'font-size:9.5pt; color:#475569;') },
+            { html: `<img src="${cefaloImgData}" style="${estiloImagemPDF(228)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 228 },
+        ]);
+    }
+
     const paginasFacial = [
         { dados: facialFrenteImgData, titulo: 'Traçado Fotométrico Facial — Vista de Frente', nota: 'Marcos da linha média, planos horizontais (bipupilar, bizigomático, bucal e interalar) e proporções faciais.' },
         { dados: facialPerfilImgData, titulo: 'Traçado Fotométrico Facial — Vista de Perfil', nota: 'Sequência do perfil mole e linha de referência Gl–Pg\'.' }
     ];
     for (const pagina of paginasFacial) {
         if (!pagina.dados) continue;
-        let dimF = await obterDimensoesImagem(pagina.dados);
-        let estiloF = estiloImgSeguro(dimF.w, dimF.h);
-        pdfHtml += `
-            <div style="page-break-before: always; page-break-inside: avoid; width:100%; display:block;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; text-align:left; margin:12px 0 10px 0;">${++secNum}. ${pagina.titulo}</h3>
-                <span style="color:#475569; font-size:9.5pt; display:block; margin-bottom:10px; text-align:left;">${pagina.nota}</span>
-                <img src="${pagina.dados}" style="${estiloF} border:1px solid #cbd5e1; border-radius:4px;">
-            </div>
-        `;
+        const secFacialImg = numSecao();
+        grupo(secFacialImg, [
+            { html: titulo(`${secFacialImg}. ${pagina.titulo}`) },
+            { html: paragrafo(pagina.nota, 'font-size:9.5pt; color:#475569;') },
+            { html: `<img src="${pagina.dados}" style="${estiloImagemPDF(236)} border:1px solid #cbd5e1; border-radius:4px;">`, alturaMaxMm: 236 },
+        ]);
     }
 
-    // PÁGINAS DO REPOSITÓRIO ICONOGRÁFICO — UMA FOTO POR PÁGINA, TÍTULO FUNDIDO NA IMAGEM
     if (Object.keys(appState.imagensPaciente).length > 0) {
-        let repositorio = appState.imagensPaciente;
-        let keys = Object.keys(repositorio);
-        secNum++;
-        let secRepositorio = secNum;
-        
-        pdfHtml += `
-            <div style="page-break-before: always;">
-                <h3 style="color:#0f172a; border-bottom:1.5px solid #cbd5e1; padding-bottom:3px; font-size:11pt; margin:12px 0 6px 0;">${secRepositorio}. Repositório Iconográfico Geral</h3>
-                <p style="font-size:9pt; color:#64748b; margin:0 0 10px 0;">${keys.length} imagem(ns) registada(s) neste processo clínico.</p>
-            </div>
-        `;
-        
-        // Compor título + imagem num único canvas para cada foto (inseparáveis no PDF)
+        const repositorio = appState.imagensPaciente;
+        const keys = Object.keys(repositorio);
+        const secRepositorio = numSecao();
+        grupo(secRepositorio, [
+            { html: titulo(`${secRepositorio}. Repositório Iconográfico Geral`) },
+            { html: paragrafo(`${keys.length} imagem(ns) registada(s) neste processo clínico.`, 'font-size:9pt; color:#64748b;') },
+        ]);
         for (let idx = 0; idx < keys.length; idx++) {
-            let key = keys[idx];
-            let labelCard = document.querySelector(`label[for="${key}"]`);
-            let txt = labelCard ? labelCard.innerText.trim() : "Exame Clínico Registado";
-            let tituloCompleto = `${secRepositorio}.${idx+1} — ${txt}`;
-
-            // Gera imagem composta (barra de título + foto num único base64)
-            let imgComposta = await gerarImagemComTitulo(repositorio[key], tituloCompleto);
-            let dim = await obterDimensoesImagem(imgComposta);
-            // Para a imagem composta usar toda a área útil da página (sem reserva para título — já está dentro)
-            let estiloFoto = estiloImgSeguro(dim.w, dim.h, 170, 243);
-
-            pdfHtml += `
-                <div style="page-break-before: always; page-break-inside: avoid; width:100%; box-sizing:border-box; padding:0; margin:0; text-align:center;">
-                    <img src="${imgComposta}" style="${estiloFoto}">
-                </div>
-            `;
+            const key = keys[idx];
+            const labelCard = document.querySelector(`label[for="${key}"]`);
+            const txt = labelCard ? labelCard.innerText.trim() : 'Exame Clínico Registado';
+            const tituloCompleto = `${secRepositorio}.${idx + 1} — ${txt}`;
+            // Título e foto compõem um único canvas (inseparáveis no PDF)
+            const imgComposta = await gerarImagemComTitulo(repositorio[key], tituloCompleto);
+            bloco(secRepositorio, `<div style="text-align:center;"><img src="${imgComposta}" style="${estiloImagemPDF(252)}"></div>`, 252);
         }
     }
 
-    element.innerHTML = pdfHtml;
+    if (!blocos.length) return;
 
-    // Configurações para A4 sem cortes de imagem
-    const opt = {
-        margin: [15, 12, 14, 12], 
-        filename: `Dossie_Ortodontico_Final_${cod}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-            scale: 2, 
-            useCORS: true, 
-            scrollY: 0, 
-            logging: false,
-            allowTaint: true
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'], avoid: '.evitar-quebra' }
+    // ------------------------------------------------------------------
+    // Medição: o conteúdo é montado fora do ecrã com a MESMA largura que terá
+    // no PDF e cada bloco recebe 12 px de espaço antes de si (padding, que não
+    // colapsa como as margens). Esta medição é a única fonte de verdade das
+    // alturas, pelo que continua correta mesmo com estilos do ecrã diferentes.
+    // ------------------------------------------------------------------
+    const host = document.createElement('div');
+    host.setAttribute('data-pdf-medicao', '1');
+    host.style.cssText = `position:fixed; left:-10000px; top:0; width:${PDF_GEOM.conteudoLarg}px; max-width:${PDF_GEOM.conteudoLarg}px; z-index:-1; pointer-events:none; background:#ffffff;`;
+
+    const embalagem = document.createElement('div');
+    embalagem.style.cssText = `width:${PDF_GEOM.conteudoLarg}px; font-family:Arial, Helvetica, sans-serif; color:#0f172a; background:#ffffff;`;
+    host.appendChild(embalagem);
+    document.body.appendChild(host);
+
+    // As imagens têm de estar DESCODIFICADAS antes da medição: uma <img> ainda
+    // por carregar mede 0×0 e colapsaria o bloco (era o que fazia desaparecer as
+    // fotografias e o esquema das arcadas do dossiê).
+    const imagensBloco = [];
+    for (const b of blocos) {
+        const m = String(b.html).match(/<img[^>]*\ssrc="([^"]*)"/i);
+        if (m) imagensBloco.push({ src: m[1], natural: await obterDimensoesImagem(m[1]), alturaMaxMm: b.alturaMaxMm || null });
+    }
+
+    // Dimensiona a <img> de um bloco pelo espaço útil da folha, a partir das
+    // dimensões nativas já conhecidas (sem depender de a imagem estar carregada).
+    const dimensionarImagemDoBloco = (raiz, dimensoes, alturaMaxMm) => {
+        const im = raiz.querySelector('img');
+        if (!im || !dimensoes || !dimensoes.w || !dimensoes.h) return;
+        const larguraMaxMm = Math.min(PDF_LARG_IMG_MM, PDF_GEOM.conteudoLarg / PDF_GEOM.MM_PX);
+        const alturaMax = Math.min(alturaMaxMm || PDF_GEOM.conteudoAlt / PDF_GEOM.MM_PX, PDF_GEOM.conteudoAlt / PDF_GEOM.MM_PX);
+        let larg = larguraMaxMm;
+        let alt = larg * (dimensoes.h / dimensoes.w);
+        if (alt > alturaMax) { alt = alturaMax; larg = alt * (dimensoes.w / dimensoes.h); }
+        // Em PÍXEIS e não em mm: o html2canvas captura a página num documento
+        // clonado, onde as unidades absolutas (mm) são convertidas com outro
+        // fator de escala e a imagem saía 1,4x maior, cortada à direita.
+        im.style.width = `${Math.round(larg * PDF_GEOM.MM_PX)}px`;
+        im.style.height = `${Math.round(alt * PDF_GEOM.MM_PX)}px`;
+        im.style.maxWidth = '100%';
+        im.style.maxHeight = '';
+        im.style.display = 'block';
+        im.style.margin = '0 auto';
+        im.style.objectFit = 'contain';
     };
 
-    html2pdf().set(opt).from(element).save();
+    const blocosDOM = [];
+    blocos.forEach((b, idx) => {
+        const d = document.createElement('div');
+        d.setAttribute('data-pdf-bloco', '1');
+        d.style.cssText = 'padding-top:12px;';
+        if (b.alturaMaxMm) {
+            d.style.overflow = 'hidden';
+            d.style.maxHeight = `${Math.round(b.alturaMaxMm * PDF_GEOM.MM_PX)}px`;
+        }
+        d.innerHTML = b.html;
+        const info = imagensBloco[idx];
+        if (info) dimensionarImagemDoBloco(d, info.natural, b.alturaMaxMm);
+        if (b.secao) d.setAttribute('data-pdf-secao', String(b.secao));
+        // As imagens já estão carregadas (vêm de data URLs): basta pedir ao
+        // browser que as mantenha resolvidas durante a medição e a captura.
+        d.querySelectorAll('img').forEach(im => { im.decoding = 'sync'; });
+        embalagem.appendChild(d);
+        blocosDOM.push(d);
+    });
+
+    const topoHost = host.getBoundingClientRect().top;
+    const medidas = blocosDOM.map((d, i) => {
+        const r = d.getBoundingClientRect();
+        return {
+            topo: r.top - topoHost,
+            base: r.bottom - topoHost,
+            altura: r.height,
+            secao: blocos[i].secao,
+            html: blocos[i].html,
+            alturaMaxMm: blocos[i].alturaMaxMm,
+        };
+    });
+
+    // --------------------------------------------------------- paginação
+    // Preenche cada folha com os blocos inteiros que couberem. A quebra cai
+    // sempre no espaço entre blocos; um bloco maior do que a folha (caso raro
+    // de uma tabela gigantesca) fica sozinho numa página e é cortado no limite.
+    const LIMITE = PDF_GEOM.limiteAlt;
+    const paginas = [];
+    let cursor = 0;
+    while (cursor < medidas.length) {
+        const topo = medidas[cursor].topo;
+        const limiteFolha = topo + LIMITE;
+        let fim = cursor;
+        while (fim + 1 < medidas.length && medidas[fim + 1].base <= limiteFolha) fim++;
+        if (medidas[fim].base > limiteFolha) {
+            // Nem o primeiro bloco cabe: fica sozinho na folha
+            fim = cursor;
+            paginas.push({ inicio: cursor, fim: cursor + 1, inicioCss: topo, limite: Math.min(medidas[cursor].base, limiteFolha) });
+        } else {
+            paginas.push({ inicio: cursor, fim: fim + 1, inicioCss: topo, limite: Math.min(medidas[fim].base, limiteFolha) });
+        }
+        cursor = fim + 1;
+    }
+
+    // ------------------------------------------------- construção das páginas
+    // Os blocos JÁ MEDIDOS são movidos (não recriados) para as folhas: mantêm
+    // exatamente a geometria medida, incluindo as imagens já carregadas (um
+    // innerHTML obrigaria o browser a voltar a descodificá-las).
+    elemento.style.position = 'fixed';
+    elemento.style.left = '-10000px';
+    elemento.style.top = '0';
+    elemento.style.zIndex = '-1';
+    elemento.innerHTML = '';
+    document.body.appendChild(elemento);
+
+    const paginasDOM = paginas.map(p => {
+        const d = document.createElement('div');
+        d.className = 'pdf-pagina';
+        d.style.cssText = `width:${PDF_GEOM.conteudoLarg}px; height:${Math.round(PDF_GEOM.conteudoAlt)}px; box-sizing:border-box; background:#ffffff; overflow:hidden;`;
+        for (let i = p.inicio; i < p.fim; i++) d.appendChild(blocosDOM[i]);
+        elemento.appendChild(d);
+        return d;
+    });
+
+    host.remove();
+
+    // ------------------------------------------------------------------
+    // Captura: cada folha é desenhada no seu próprio canvas e cortada no
+    // `limite` calculado, que cai SEMPRE entre blocos — nunca a meio de uma
+    // linha de texto ou de uma linha de tabela.
+    // ------------------------------------------------------------------
+    const FATOR = 2; // igual ao scale do html2canvas
+
+    async function capturarPaginaCanvas(paginaEl, alturaCss) {
+        const canvas = await html2canvas(paginaEl, {
+            scale: FATOR,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            width: Math.ceil(PDF_GEOM.conteudoLarg),
+            windowWidth: Math.ceil(PDF_GEOM.conteudoLarg),
+        });
+        const alt = Math.max(1, Math.min(canvas.height, Math.ceil(alturaCss * FATOR)));
+        const destino = document.createElement('canvas');
+        destino.width = canvas.width;
+        destino.height = alt;
+        const ctx = destino.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, destino.width, destino.height);
+        ctx.drawImage(canvas, 0, 0, canvas.width, alt, 0, 0, canvas.width, alt);
+        return destino.toDataURL('image/jpeg', 0.92);
+    }
+
+    const imagensPaginas = [];
+    for (let i = 0; i < paginas.length; i++) {
+        const p = paginas[i];
+        const alturaCss = Math.max(1, p.limite - p.inicioCss);
+        imagensPaginas.push(await capturarPaginaCanvas(paginasDOM[i], alturaCss));
+    }
+    elemento.remove();
+
+    // ------------------------------------------------------------- escrita do PDF
+    const larguraMm = PDF_GEOM.LARGURA;
+    const alturaMm = PDF_GEOM.ALTURA;
+    const larguraUtilMm = larguraMm - 2 * PDF_GEOM.MARGEM;
+    const alturaUtilMm = alturaMm - 2 * PDF_GEOM.MARGEM;
+    const ficheiro = `Dossie_Ortodontico_Final_${cod}`.replace(/[^\w.\-]+/g, '_') + '.pdf';
+
+    if (!window.html2pdf) return;
+    // O html2pdf é usado apenas como fábrica do jsPDF (a paginação e o desenho
+    // das páginas são feitos aqui); precisa na mesma de um elemento de origem.
+    const fonte = document.createElement('div');
+    fonte.setAttribute('data-pdf-fonte', '1');
+    fonte.style.display = 'none';
+    document.body.appendChild(fonte);
+    const trabalhador = html2pdf().set({ jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(fonte).toPdf();
+    const doc = await trabalhador.get('pdf');
+    fonte.remove();
+
+    for (let i = 0; i < imagensPaginas.length; i++) {
+        const p = paginas[i];
+        const alturaCss = Math.max(1, p.limite - p.inicioCss);
+        const alturaMmImg = Math.min(alturaUtilMm, alturaCss / PDF_GEOM.MM_PX);
+        if (i > 0) doc.addPage();
+        doc.addImage(imagensPaginas[i], 'JPEG', PDF_GEOM.MARGEM, PDF_GEOM.MARGEM, larguraUtilMm, alturaMmImg, undefined, 'FAST');
+    }
+    doc.save(ficheiro);
 }
 
 // ==========================================================================
