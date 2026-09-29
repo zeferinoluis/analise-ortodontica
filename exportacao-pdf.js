@@ -2,6 +2,13 @@
 // EXPORTAÇÃO PDF — geração do dossiê clínico completo (html2pdf/html2canvas)
 // ==========================================================================
 
+// Versão do exportador de dossiê. Serve para confirmar, na consola do browser,
+// que está a correr o código atual e não uma cópia antiga em cache. Subir sempre
+// que este ficheiro (ou index.html / service-worker.js) for alterado.
+const EXPORTACAO_PDF_VERSAO = '2026-09-29a';
+window.EXPORTACAO_PDF_VERSAO = EXPORTACAO_PDF_VERSAO;
+console.log('OrtoAnalytic: exportação de dossiê, versão ' + EXPORTACAO_PDF_VERSAO);
+
 // Alguns textos do dossiê (por exemplo o resumo da interpretação automática
 // guardada no histórico) já chegam com entidades HTML de uma escrita anterior.
 // É preciso desfazê-las antes de voltar a escapar, senão o PDF mostra "&#39;".
@@ -349,15 +356,18 @@ async function exportarDossierClinicoCompletoPDF() {
         return `<thead><tr style="background:#f1f5f9;">${colunas.map(c => `<th ${th}>${c}</th>`).join('')}</tr></thead>`;
     }
 
-    // Bloco de resultados faciais de uma vista (cabeçalho + tabela), reutilizado para frente e perfil
-    function blocoResultadosFacialPDF(titulo, subtitulo, linhas) {
-        return `
-            <h4 style="color:#0284c7; font-size:10pt; margin:0 0 4px 0;">${titulo}</h4>
-            <p style="font-size:8.5pt; color:#64748b; margin:0 0 6px 0;">${subtitulo}</p>
-            <table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
+    // Blocos de resultados faciais de uma vista. São três blocos distintos (e não
+    // um só) para que o cabeçalho da vista fique sempre na mesma página que a sua
+    // tabela: o cabeçalho e a legenda ficam "colados ao bloco seguinte".
+    function blocosResultadosFacialPDF(tituloVista, subtitulo, linhas) {
+        return [
+            { html: `<h4 style="color:#0284c7; font-size:10pt; margin:0 0 4px 0;">${tituloVista}</h4>` },
+            { html: `<p style="font-size:8.5pt; color:#64748b; margin:0 0 6px 0;">${subtitulo}</p>`, manterJunto: true },
+            { html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
                 ${cabecalhoTabelaPDF(['Parâmetro', 'Medido', 'Norma', 'Status'])}
                 <tbody>${renderizarTabelaResultadosPDF(linhas)}</tbody>
-            </table>`;
+            </table>` },
+        ];
     }
 
     // ------------------------------------------------------------ blocos lógicos
@@ -442,13 +452,17 @@ async function exportarDossierClinicoCompletoPDF() {
     const secModelos = numSecao();
     const blocosModelos = [{ html: titulo(`${secModelos}. Análise Quantitativa de Modelos de Estudo`) }];
     if (appState.modelosRegistados) {
-        if (resultadosModelos.avisos.length) {
-            blocosModelos.push({ html: aviso(`<strong>Verificar antes de concluir:</strong><br>${resultadosModelos.avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}`, '#fffbeb', '#fde68a', '#92400e') });
-        }
+        // A TABELA vem logo a seguir ao título: como o título fica sempre com o
+        // bloco seguinte, é a tabela (o corpo da análise) que o acompanha, e não
+        // a caixa de avisos — era isso que deixava o título e a análise em
+        // páginas diferentes.
         blocosModelos.push({ html: `<table style="width:100%; border-collapse:collapse; font-size:9.5pt; table-layout:fixed;">
                 ${cabecalhoTabelaPDF(['Métrica / Parâmetro', 'Computado', 'Norma de Referência', 'Status Clínico'])}
                 <tbody>${linhasModelosParaPDF(resultadosModelos.linhas)}</tbody>
             </table>` });
+        if (resultadosModelos.avisos.length) {
+            blocosModelos.push({ html: aviso(`<strong>Verificar antes de concluir:</strong><br>${resultadosModelos.avisos.map(a => '• ' + escaparHTML(a)).join('<br>')}`, '#fffbeb', '#fde68a', '#92400e') });
+        }
     } else {
         blocosModelos.push({ html: paragrafo('Análise de modelos não registada para este paciente. (Para incluir, preencha os dados na Análise Digital → Análise de Modelos e prima "Guardar Modelos".)', 'background:#f8fafc; padding:10px; border:1px solid #e2e8f0; border-radius:4px;') });
     }
@@ -456,11 +470,11 @@ async function exportarDossierClinicoCompletoPDF() {
 
     // =============================== 5. FACIAL ===============================
     const secFacial = numSecao();
-    grupo(secFacial, [
-        { html: titulo(`${secFacial}. Resultados da Análise Fotométrica Facial (Frente e Perfil)`) },
-        { html: blocoResultadosFacialPDF('Vista de FRENTE — proporções e simetria', 'Terços verticais, proporções horizontais, linha bipupilar e assimetrias entre lado direito e esquerdo.', relatorioFacial.frente) },
-        { html: blocoResultadosFacialPDF('Vista de PERFIL — perfil mole e terço inferior', 'Ângulos nasolabial, mentolabial e cervicomental, convexidade facial e posição do lábio superior.', relatorioFacial.perfil) },
-    ]);
+    grupo(secFacial, [].concat(
+        [{ html: titulo(`${secFacial}. Resultados da Análise Fotométrica Facial (Frente e Perfil)`) }],
+        blocosResultadosFacialPDF('Vista de FRENTE — proporções e simetria', 'Terços verticais, proporções horizontais, linha bipupilar e assimetrias entre lado direito e esquerdo.', relatorioFacial.frente),
+        blocosResultadosFacialPDF('Vista de PERFIL — perfil mole e terço inferior', 'Ângulos nasolabial, mentolabial e cervicomental, convexidade facial e posição do lábio superior.', relatorioFacial.perfil)
+    ));
 
     // =============================== 6. CONCLUSÕES ===============================
     const secConclusoes = numSecao();
@@ -507,7 +521,7 @@ async function exportarDossierClinicoCompletoPDF() {
         const secRepositorio = numSecao();
         grupo(secRepositorio, [
             { html: titulo(`${secRepositorio}. Repositório Iconográfico Geral`) },
-            { html: paragrafo(`${keys.length} imagem(ns) registada(s) neste processo clínico.`, 'font-size:9pt; color:#64748b;') },
+            { html: paragrafo(`${keys.length} imagem(ns) registada(s) neste processo clínico.`, 'font-size:9pt; color:#64748b;'), manterJunto: true },
         ]);
         for (let idx = 0; idx < keys.length; idx++) {
             const key = keys[idx];
@@ -634,12 +648,27 @@ async function exportarDossierClinicoCompletoPDF() {
         i = fim;
     }
 
+    // Um grupo "grande" (tipicamente uma tabela de análise) ocupa mais de ~60% da
+    // folha: se começar a meio de uma página, é inevitável que se parta em duas.
+    // Nesses casos começa em página nova, para ficar inteiro.
+    const ehGrupoGrande = (gr) => (medidas[gr.fim].base - medidas[gr.inicio].topo) > LIMITE * 0.6;
+
     const paginas = [];
     let g = 0;
+    let topoPagina = 0;      // topo do conteúdo já colocado na folha corrente
+    let temConteudo = false; // a folha corrente já tem blocos?
     while (g < grupos.length) {
         const inicioBloco = grupos[g].inicio;
-        const topo = medidas[inicioBloco].topo;
-        const limiteFolha = topo + LIMITE;
+        let topo = medidas[inicioBloco].topo;
+        const alturaGrupo = medidas[grupos[g].fim].base - topo;
+
+        // Grupo grande que não cabe no que resta da folha -> começa em página nova
+        if (temConteudo && ehGrupoGrande(grupos[g]) && (topo + alturaGrupo) > (topoPagina + LIMITE)) {
+            temConteudo = false;
+            topoPagina = topo;
+        }
+
+        const limiteFolha = topoPagina + LIMITE;
         let fimGrupo = g;
         let fimBloco = grupos[g].fim;
         while (fimGrupo + 1 < grupos.length && medidas[grupos[fimGrupo + 1].fim].base <= limiteFolha) {
@@ -657,6 +686,8 @@ async function exportarDossierClinicoCompletoPDF() {
             inicioCss: topo,
             limite: Math.min(medidas[fimBloco].base, limiteFolha),
         });
+        topoPagina = medidas[fimBloco].base;
+        temConteudo = true;
         g = fimGrupo + 1;
     }
 

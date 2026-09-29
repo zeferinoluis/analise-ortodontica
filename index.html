@@ -202,7 +202,7 @@
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background:white; padding:15px; border-radius:8px; border:1px solid #cbd5e1;">
                 <div>
                     <h2 style="margin:0; font-size:1.4rem;">Evolução Temporal do Paciente</h2>
-                    <span style="font-size:0.85rem; color:#64748b;">Emita o dossiê clínico unificado sem cortes a partir deste painel.</span>
+                    <span style="font-size:0.85rem; color:#64748b;">Emita o dossiê clínico unificado sem cortes a partir deste painel. <span id="versao-exportacao" style="color:#94a3b8;"></span></span>
                 </div>
                 <button class="pdf-btn" onclick="exportarDossierClinicoCompletoPDF()" style="margin:0; width:auto; padding: 0.75rem 2.5rem; background:#16a34a;">Gerar Dossiê Clínico Completo (PDF)</button>
             </div>
@@ -234,19 +234,38 @@
         </div>
     </div>
 
-    <script src="utils.js"></script>
-    <script src="state.js"></script>
-    <script src="database.js"></script>
-    <script src="undo-redo.js"></script>
-    <script src="canvas-editor.js"></script>
-    <script src="cephalometry.js"></script>
-    <script src="facial.js"></script>
-    <script src="models.js"></script>
-    <script src="interpretacao-clinica.js"></script>
-    <script src="ui.js"></script>
-    <script src="exportacao-pdf.js"></script>
-    <script src="google-drive.js"></script>
+    <script src="utils.js?v=2026-09-29a"></script>
+    <script src="state.js?v=2026-09-29a"></script>
+    <script src="database.js?v=2026-09-29a"></script>
+    <script src="undo-redo.js?v=2026-09-29a"></script>
+    <script src="canvas-editor.js?v=2026-09-29a"></script>
+    <script src="cephalometry.js?v=2026-09-29a"></script>
+    <script src="facial.js?v=2026-09-29a"></script>
+    <script src="models.js?v=2026-09-29a"></script>
+    <script src="interpretacao-clinica.js?v=2026-09-29a"></script>
+    <script src="ui.js?v=2026-09-29a"></script>
+    <script src="exportacao-pdf.js?v=2026-09-29a"></script>
+    <script src="google-drive.js?v=2026-09-29a"></script>
     <script>
+        // Mostra a versão do exportador de dossiê: confirma que a página está a
+        // correr o código atual e não uma cópia antiga em cache.
+        (function mostrarVersaoExportacao() {
+            var alvo = document.getElementById('versao-exportacao');
+            if (!alvo) return;
+            var n = 0;
+            var t = setInterval(function() {
+                n++;
+                if (window.EXPORTACAO_PDF_VERSAO) {
+                    alvo.textContent = '· exportação v' + window.EXPORTACAO_PDF_VERSAO;
+                    clearInterval(t);
+                } else if (n > 40) {
+                    alvo.textContent = '· exportação: versão desconhecida (recarregue com Cmd+Shift+R)';
+                    alvo.style.color = '#dc2626';
+                    clearInterval(t);
+                }
+            }, 100);
+        })();
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('service-worker.js').catch(function(err) {
