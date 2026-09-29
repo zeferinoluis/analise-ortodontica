@@ -1,4 +1,4 @@
-ATUALIZAÇÃO DA APLICAÇÃO NO GITHUB PAGES  —  versão 2026-09-29b
+ATUALIZAÇÃO DA APLICAÇÃO NO GITHUB PAGES  —  versão 2026-09-29c
 ================================================================
 
 Carregue para o repositório TODOS os ficheiros deste pacote, substituindo os
@@ -11,27 +11,34 @@ COMO CONFIRMAR QUE A VERSÃO NOVA ESTÁ ATIVA
 2. Vá ao separador "Evolução & Exportação".
 3. Por baixo do texto de ajuda deve ler:
 
-      · exportação v2026-09-29b
+      · exportação v2026-09-29c
 
-   Se não ler isto, o browser ainda tem a versão antiga: Cmd + Shift + R e, se
-   preciso, DevTools > Application > Service Workers > Unregister, e recarregue.
+   Se não ler isto, ainda tem a versão antiga na cache do browser.
+   Recarregar ignorando a cache no macOS:
+     - Safari:  ⇧ + clicar no botão de recarregar (⌘⇧R abre o Leitor, não recarrega);
+                ou ⌘⌥E (Empty Caches) e depois recarregar
+     - Chrome / Edge / Brave:  ⌘⇧R
+     - Firefox:  ⌘⇧R
+     - Qualquer um: DevTools > Network > "Disable cache" e recarregar; ou
+                   DevTools > Application > Service Workers > Unregister
 
 4. Só depois gere o dossiê.
 
 
-O QUE MUDOU NESTA VERSÃO (2026-09-29b)
---------------------------------------
-- As tabelas são divididas em PEDAÇOS de linhas inteiras sempre que têm um
-  título/legenda por cima. Assim o título, a legenda e a primeira parte da
-  tabela ficam sempre na MESMA página, e o resto continua na página seguinte
-  com o cabeçalho repetido.
-- Isto resolve os casos reais (histórico de consultas longo, análise de
-  modelos, análise facial frente/perfil) em que o grupo "título + legenda +
-  tabela" não cabia no espaço que restava da página, deixando o título órfão
-  no fim da página anterior.
+CORREÇÕES DESTA VERSÃO (face à 2026-09-29b)
+-------------------------------------------
+- (2026-09-29c) Texto de ajuda corrigido: os atalhos de recarregar sem cache no
+  macOS estavam indicados de forma errada (no Safari o ⌘⇧R abre o Leitor).
+- (2026-09-29b, já incluída) As tabelas são divididas em PEDAÇOS de linhas
+  inteiras sempre que têm um título/legenda por cima, para que o título, a
+  legenda e a primeira parte da tabela fiquem sempre na MESMA página e o resto
+  continue na página seguinte com o cabeçalho repetido. É o que resolve os
+  casos reais (histórico de consultas longo, análise de modelos, análise facial
+  frente/perfil) em que o grupo "título + legenda + tabela" não cabia no espaço
+  restante da página.
 - Verificado com os dados reais do processo 2648V (15 fotografias, histórico de
   3 consultas, 16 marcos cefalométricos): 23 páginas, nenhuma em branco,
-  nenhuma com conteúdo encostado ao limite inferior, e cada título com a sua
+  nenhuma com conteúdo encostado ao limite inferior, cada título com a sua
   análise ou fotografia.
 
 FICHEIROS INCLUÍDOS

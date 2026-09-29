@@ -5,7 +5,7 @@
 // Versão do exportador de dossiê. Serve para confirmar, na consola do browser,
 // que está a correr o código atual e não uma cópia antiga em cache. Subir sempre
 // que este ficheiro (ou index.html / service-worker.js) for alterado.
-const EXPORTACAO_PDF_VERSAO = '2026-09-29b';
+const EXPORTACAO_PDF_VERSAO = '2026-09-29c';
 window.EXPORTACAO_PDF_VERSAO = EXPORTACAO_PDF_VERSAO;
 console.log('OrtoAnalytic: exportação de dossiê, versão ' + EXPORTACAO_PDF_VERSAO);
 
